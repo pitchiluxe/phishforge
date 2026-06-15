@@ -1,6 +1,5 @@
 {
   "buildCommand": "npx turbo run build --filter=@phishforge/web",
   "outputDirectory": "apps/web/.next",
-  "framework": "nextjs",
   "installCommand": "npm install"
 }

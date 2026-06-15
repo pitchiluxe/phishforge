@@ -155,7 +155,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       {/* Primary nav */}
       <nav style={{ flex: 1, padding: '4px 8px 8px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 1 }}>
         {NAV_ITEMS.map((item) => (
-          <NavItem key={item.href} item={item} active={isActive(item.href, item.exact)} collapsed={collapsed} />
+          <NavItem key={item.href} item={item} active={isActive(item.href, 'exact' in item ? item.exact : undefined)} collapsed={collapsed} />
         ))}
 
         {/* CyberBrain — special button (not a nav link) */}

@@ -290,7 +290,7 @@ export function TemplateGrid({ templates }: { templates: TemplateItem[] }) {
                 <FileText size={13} style={{ color: '#00ff41', opacity: 0.6 }} />
                 <span style={{ ...MONO, fontSize: 12, fontWeight: 600, color: '#c8ffd4' }}>{t.name}</span>
               </div>
-              {t.ai_generated && <Sparkles size={11} style={{ color: '#00ff41', opacity: 0.7 }} title="AI Generated" />}
+              {t.ai_generated && <Sparkles size={11} style={{ color: '#00ff41', opacity: 0.7 }} aria-label="AI Generated" />}
             </div>
 
             <p style={{
