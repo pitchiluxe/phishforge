@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
   const model = requestedModel ?? (
     provider_ === 'ollama'
       ? (process.env.OLLAMA_DEFAULT_MODEL ?? 'llama3.2')
-      : (process.env.OPENROUTER_DEFAULT_MODEL ?? 'deepseek/deepseek-chat-v3-0324')
+      : (process.env.OPENROUTER_DEFAULT_MODEL ?? 'deepseek/deepseek-r1:free')
   );
 
   const systemMessage = SYSTEM_PROMPT;
@@ -73,9 +73,11 @@ export async function POST(req: NextRequest) {
         },
       });
       const freeModels = [
-        'google/gemini-2.0-flash-exp:free',
+        'deepseek/deepseek-r1:free',
+        'deepseek/deepseek-r1-0528:free',
+        'google/gemini-2.5-flash:free',
         'meta-llama/llama-3.3-70b-instruct:free',
-        'meta-llama/llama-3.1-8b-instruct:free',
+        'qwen/qwen3-14b:free',
         'qwen/qwen3-8b:free',
         'mistralai/mistral-7b-instruct:free',
       ];

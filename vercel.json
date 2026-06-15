@@ -1,19 +1,6 @@
 {
-  "framework": "nextjs",
-  "buildCommand": "cd apps/web && npm run build",
+  "buildCommand": "npx turbo run build --filter=@phishforge/web",
   "outputDirectory": "apps/web/.next",
-  "installCommand": "npm install",
-  "devCommand": "cd apps/web && npm run dev",
-  "rewrites": [
-    { "source": "/(.*)", "destination": "/apps/web/$1" }
-  ],
-  "env": {
-    "NEXT_PUBLIC_SUPABASE_URL": "@supabase_url",
-    "NEXT_PUBLIC_SUPABASE_ANON_KEY": "@supabase_anon_key",
-    "OPENROUTER_API_KEY": "@openrouter_api_key",
-    "OPENROUTER_BASE_URL": "@openrouter_base_url",
-    "OPENROUTER_DEFAULT_MODEL": "@openrouter_default_model",
-    "PINECONE_API_KEY": "@pinecone_api_key",
-    "DATABASE_URL": "@database_url"
-  }
+  "framework": "nextjs",
+  "installCommand": "npm install"
 }

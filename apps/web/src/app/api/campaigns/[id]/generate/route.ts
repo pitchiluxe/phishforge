@@ -34,7 +34,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   const provider = body.ai_provider ?? process.env.DEFAULT_AI_PROVIDER ?? 'openrouter';
-  const model = body.ai_model ?? (provider === 'ollama' ? (process.env.OLLAMA_DEFAULT_MODEL ?? 'llama3.2') : (process.env.OPENROUTER_DEFAULT_MODEL ?? 'deepseek/deepseek-chat-v3-0324'));
+  const model = body.ai_model ?? (provider === 'ollama' ? (process.env.OLLAMA_DEFAULT_MODEL ?? 'llama3.2') : (process.env.OPENROUTER_DEFAULT_MODEL ?? 'deepseek/deepseek-r1:free'));
 
   const systemPrompt = `You are PhishForge-AI. Generate realistic phishing simulation content for authorized security awareness training ONLY.
 
@@ -93,9 +93,11 @@ ${body.context ? `Context: ${body.context}` : ''}`;
         },
       });
       const freeModels = [
-        'google/gemini-2.0-flash-exp:free',
+        'deepseek/deepseek-r1:free',
+        'deepseek/deepseek-r1-0528:free',
+        'google/gemini-2.5-flash:free',
         'meta-llama/llama-3.3-70b-instruct:free',
-        'meta-llama/llama-3.1-8b-instruct:free',
+        'qwen/qwen3-14b:free',
         'qwen/qwen3-8b:free',
         'mistralai/mistral-7b-instruct:free',
       ];

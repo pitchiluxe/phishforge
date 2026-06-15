@@ -81,7 +81,7 @@ export async function POST(req: NextRequest) {
   const baseModel = requestedModel ?? (
     provider_ === 'ollama'
       ? (process.env.OLLAMA_DEFAULT_MODEL ?? 'llama3.2')
-      : (process.env.OPENROUTER_DEFAULT_MODEL ?? 'deepseek/deepseek-chat-v3-0324')
+      : (process.env.OPENROUTER_DEFAULT_MODEL ?? 'deepseek/deepseek-r1:free')
   );
 
   const userMessage = messages.length > 0
