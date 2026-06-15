@@ -184,7 +184,7 @@ ${body.context ? `Context: ${body.context}` : ''}`;
     return NextResponse.json({ template, safety_score });
   } catch (error: any) {
     if (!isDemo && supabase) {
-      await supabase.from('ai_generation_logs').insert({
+      void supabase.from('ai_generation_logs').insert({
         organization_id: orgId,
         user_id: sessionUserId,
         campaign_id: campaignId,
@@ -192,7 +192,7 @@ ${body.context ? `Context: ${body.context}` : ''}`;
         model,
         success: false,
         error_message: error.message,
-      }).catch(() => {});
+      });
     }
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
