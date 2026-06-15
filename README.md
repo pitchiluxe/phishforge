@@ -1,10 +1,15 @@
 <p align="center">
+  <img src="Erick1.jpg" alt="PhishForge Platform" width="100%" style="max-width:900px;border-radius:12px;" />
+</p>
+
+<p align="center">
   <img src="https://img.shields.io/badge/Next.js-15-black?style=for-the-badge&logo=nextdotjs&logoColor=white" alt="Next.js 15" />
   <img src="https://img.shields.io/badge/TypeScript-5.x-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript" />
   <img src="https://img.shields.io/badge/NestJS-10-E0234E?style=for-the-badge&logo=nestjs&logoColor=white" alt="NestJS" />
   <img src="https://img.shields.io/badge/Supabase-PostgreSQL-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white" alt="Supabase" />
   <img src="https://img.shields.io/badge/Pinecone-Vector%20DB-00B386?style=for-the-badge" alt="Pinecone" />
   <img src="https://img.shields.io/badge/OpenRouter-AI-FF6B35?style=for-the-badge" alt="OpenRouter AI" />
+  <img src="https://img.shields.io/badge/Vercel-Live-000000?style=for-the-badge&logo=vercel&logoColor=white" alt="Live on Vercel" />
 </p>
 
 <h1 align="center">PhishForge</h1>
@@ -15,7 +20,10 @@
 </p>
 
 <p align="center">
-  <a href="#live-demo">Live Demo</a> &bull;
+  <a href="https://phishforge-ai.vercel.app" target="_blank"><strong>🔗 Live Demo → phishforge-ai.vercel.app</strong></a>
+</p>
+
+<p align="center">
   <a href="#features">Features</a> &bull;
   <a href="#tech-stack">Tech Stack</a> &bull;
   <a href="#getting-started">Getting Started</a> &bull;
@@ -170,7 +178,9 @@ phishforge/
 
 ## Live Demo
 
-Live demo coming soon. Self-host with Docker in minutes — see [Getting Started](#getting-started).
+**[https://phishforge-ai.vercel.app](https://phishforge-ai.vercel.app)** — Fully deployed on Vercel. Login with a demo account or connect your own Supabase project.
+
+Self-host with Docker in minutes — see [Getting Started](#getting-started).
 
 ---
 
