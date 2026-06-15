@@ -43,13 +43,14 @@ function extractFinalAnswer(raw: string): string {
 }
 
 const FALLBACK_MODELS = [
+  'deepseek/deepseek-r1:free',
+  'deepseek/deepseek-r1-0528:free',
   'google/gemini-2.0-flash-exp:free',
+  'google/gemini-2.5-flash:free',
   'meta-llama/llama-3.3-70b-instruct:free',
   'meta-llama/llama-3.1-8b-instruct:free',
   'qwen/qwen3-14b:free',
   'qwen/qwen3-8b:free',
-  'qwen/qwen-2-7b-instruct:free',
-  'microsoft/phi-3-mini-128k-instruct:free',
   'mistralai/mistral-7b-instruct:free',
   'nousresearch/hermes-3-llama-3.1-8b:free',
 ];

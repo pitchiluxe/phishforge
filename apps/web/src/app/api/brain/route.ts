@@ -55,7 +55,7 @@ const FALLBACK_MODELS = [
   'qwen/qwen3-14b:free',
   'qwen/qwen3-8b:free',
   'mistralai/mistral-7b-instruct:free',
-  'microsoft/phi-3-mini-128k-instruct:free',
+  'nousresearch/hermes-3-llama-3.1-405b:free',
 ];
 
 export async function POST(req: NextRequest) {
