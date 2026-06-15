@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import OpenAI from 'openai';
+import { callOpenRouter, stripThinkTags } from '@/lib/ai/openrouter';
 
 const SYSTEM_PROMPT = `You are CyberForge-AI, a cybersecurity training facilitator running interactive security awareness simulations for authorized employee training.
 
@@ -25,17 +25,16 @@ export async function POST(req: NextRequest) {
   const { mode, messages = [], scenarioContext, provider, model: requestedModel } = body;
 
   const provider_ = provider ?? process.env.DEFAULT_AI_PROVIDER ?? 'openrouter';
-  const model = requestedModel ?? (
+  const primaryModel = requestedModel ?? (
     provider_ === 'ollama'
       ? (process.env.OLLAMA_DEFAULT_MODEL ?? 'llama3.2')
-      : (process.env.OPENROUTER_DEFAULT_MODEL ?? 'deepseek/deepseek-r1:free')
+      : (process.env.OPENROUTER_DEFAULT_MODEL ?? undefined)
   );
 
-  const systemMessage = SYSTEM_PROMPT;
   const contextMessage = `SCENARIO CONTEXT: ${scenarioContext}\nMODE: ${mode === 'score' ? 'SCORE — evaluate the conversation and return JSON scores' : 'SIMULATE — stay in character as the attacker/scenario presenter'}`;
 
   const apiMessages = [
-    { role: 'system' as const, content: systemMessage },
+    { role: 'system' as const, content: SYSTEM_PROMPT },
     { role: 'user' as const, content: contextMessage },
     ...messages.map((m: { role: string; content: string }) => ({
       role: m.role as 'user' | 'assistant',
@@ -53,61 +52,23 @@ export async function POST(req: NextRequest) {
         res = await fetch(`${ollamaUrl}/api/chat`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ model, messages: apiMessages, stream: false, options: { temperature: 0.7, num_predict: 1000 } }),
+          body: JSON.stringify({ model: primaryModel, messages: apiMessages, stream: false, options: { temperature: 0.7, num_predict: 1000 } }),
           signal: AbortSignal.timeout(120_000),
         });
       } catch {
         throw new Error(`Ollama is not reachable at ${ollamaUrl}. Start with: ollama serve`);
       }
-      if (res.status === 404) throw new Error(`Ollama model "${model}" not found. Pull it with: ollama pull ${model}`);
+      if (res.status === 404) throw new Error(`Ollama model "${primaryModel}" not found. Pull it with: ollama pull ${primaryModel}`);
       if (!res.ok) throw new Error(`Ollama error ${res.status}`);
       const data = await res.json();
-      content = data.message?.content ?? '';
+      content = stripThinkTags(data.message?.content ?? '');
     } else {
-      const client = new OpenAI({
-        apiKey: process.env.OPENROUTER_API_KEY!,
-        baseURL: process.env.OPENROUTER_BASE_URL ?? 'https://openrouter.ai/api/v1',
-        defaultHeaders: {
-          'HTTP-Referer': process.env.OPENROUTER_SITE_URL ?? 'https://phishforge.ai',
-          'X-Title': 'PhishForge Classroom',
-        },
-      });
-      const freeModels = [
-        'deepseek/deepseek-r1:free',
-        'deepseek/deepseek-r1-0528:free',
-        'google/gemini-2.5-flash:free',
-        'meta-llama/llama-3.3-70b-instruct:free',
-        'qwen/qwen3-14b:free',
-        'qwen/qwen3-8b:free',
-        'mistralai/mistral-7b-instruct:free',
-      ];
-      const modelsToTry = [model, ...freeModels.filter(m => m !== model)];
-      let lastErr: Error | null = null;
-      let tokensUsed = 0;
-      let modelUsed = model;
-      for (const m of modelsToTry) {
-        try {
-          const completion = await client.chat.completions.create({
-            model: m,
-            messages: apiMessages,
-            temperature: 0.7,
-            max_tokens: 1000,
-          });
-          content = completion.choices[0].message.content ?? '';
-          if (content) {
-            tokensUsed = completion.usage?.total_tokens ?? 0;
-            modelUsed = m;
-            break;
-          }
-        } catch (e: unknown) {
-          lastErr = e instanceof Error ? e : new Error(String(e));
-        }
-      }
-      if (!content) throw lastErr ?? new Error('All models failed.');
+      const result = await callOpenRouter(apiMessages, { maxTokens: 1000, temperature: 0.7, primaryModel });
+      content = stripThinkTags(result.content);
       fetch(`${process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'}/api/usage/log`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ feature: 'classroom', tokensUsed, model: modelUsed }),
+        body: JSON.stringify({ feature: 'classroom', tokensUsed: result.tokens, model: result.model }),
       }).catch(() => {});
     }
 

@@ -1,14 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import OpenAI from 'openai';
-
-const FREE_MODELS = [
-  'deepseek/deepseek-r1:free',
-  'deepseek/deepseek-r1-0528:free',
-  'google/gemini-2.5-flash:free',
-  'meta-llama/llama-3.3-70b-instruct:free',
-  'qwen/qwen3-14b:free',
-  'mistralai/mistral-7b-instruct:free',
-];
+import { callOpenRouter } from '@/lib/ai/openrouter';
 
 function randomDate(daysAgo: number) {
   const d = new Date(Date.now() - Math.floor(Math.random() * daysAgo) * 86400000);
@@ -18,15 +9,6 @@ function randomDate(daysAgo: number) {
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
   const count: number = Math.min(body.count ?? 35, 40);
-
-  const client = new OpenAI({
-    apiKey: process.env.OPENROUTER_API_KEY ?? '',
-    baseURL: process.env.OPENROUTER_BASE_URL ?? 'https://openrouter.ai/api/v1',
-    defaultHeaders: {
-      'HTTP-Referer': process.env.OPENROUTER_SITE_URL ?? 'https://phishforge.ai',
-      'X-Title': 'PhishForge AI',
-    },
-  });
 
   const systemPrompt = `You are a cybersecurity threat intelligence analyst. Generate realistic, technically accurate threat intelligence reports for security teams.`;
 
@@ -43,28 +25,21 @@ Rules:
 - Return ONLY the JSON array — no markdown fences, no preamble`;
 
   let raw = '';
-  let lastErr: Error | null = null;
-
-  for (const model of FREE_MODELS) {
-    try {
-      const res = await client.chat.completions.create({
-        model,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
-        ],
-        temperature: 0.9,
-        max_tokens: 6000,
-      });
-      raw = res.choices[0]?.message?.content ?? '';
-      if (raw) break;
-    } catch (e) {
-      lastErr = e instanceof Error ? e : new Error(String(e));
-    }
+  try {
+    const result = await callOpenRouter(
+      [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
+      { maxTokens: 6000, temperature: 0.9 },
+    );
+    raw = result.content;
+  } catch (e) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : 'All models failed' }, { status: 500 });
   }
 
   if (!raw) {
-    return NextResponse.json({ error: lastErr?.message ?? 'All models failed' }, { status: 500 });
+    return NextResponse.json({ error: 'Empty response from AI' }, { status: 500 });
   }
 
   // Strip any markdown fences the model may have added

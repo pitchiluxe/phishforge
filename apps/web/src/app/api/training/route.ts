@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import OpenAI from 'openai';
+import { callOpenRouter, stripThinkTags } from '@/lib/ai/openrouter';
 
 const SYSTEM_PROMPT = `You are CyberForge-Trainer, an AI-powered cybersecurity training system running realistic phishing and social engineering attack simulations for authorized security awareness training.
 
@@ -27,15 +27,15 @@ export async function POST(req: NextRequest) {
   const { mode, scenario, messages = [], provider, model: requestedModel } = body;
 
   const provider_ = provider ?? process.env.DEFAULT_AI_PROVIDER ?? 'openrouter';
-  const model = requestedModel ?? (
+  const primaryModel = requestedModel ?? (
     provider_ === 'ollama'
       ? (process.env.OLLAMA_DEFAULT_MODEL ?? 'llama3.2')
-      : (process.env.OPENROUTER_DEFAULT_MODEL ?? 'deepseek/deepseek-r1:free')
+      : (process.env.OPENROUTER_DEFAULT_MODEL ?? undefined)
   );
 
   const contextPrompt = mode === 'score'
     ? `SCORE MODE: Evaluate this training session for scenario "${scenario.title}". Context: ${scenario.context}. Return JSON scores only.`
-    : `SIMULATE MODE: You are running a "${scenario.title}" scenario. Context: ${scenario.context}. ${messages.length === 0 ? 'Start the scenario now — present the attack/situation to the trainee.' : 'Continue the scenario based on the trainee\'s last response.'}`;
+    : `SIMULATE MODE: You are running a "${scenario.title}" scenario. Context: ${scenario.context}. ${messages.length === 0 ? 'Start the scenario now — present the attack/situation to the trainee.' : "Continue the scenario based on the trainee's last response."}`;
 
   const apiMessages = [
     { role: 'system' as const, content: SYSTEM_PROMPT },
@@ -56,61 +56,23 @@ export async function POST(req: NextRequest) {
         res = await fetch(`${ollamaUrl}/api/chat`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ model, messages: apiMessages, stream: false, options: { temperature: 0.75, num_predict: 900 } }),
+          body: JSON.stringify({ model: primaryModel, messages: apiMessages, stream: false, options: { temperature: 0.75, num_predict: 900 } }),
           signal: AbortSignal.timeout(120_000),
         });
       } catch {
         throw new Error(`Ollama is not reachable at ${ollamaUrl}. Start with: ollama serve`);
       }
-      if (res.status === 404) throw new Error(`Ollama model "${model}" not found. Pull it: ollama pull ${model}`);
+      if (res.status === 404) throw new Error(`Ollama model "${primaryModel}" not found. Pull it: ollama pull ${primaryModel}`);
       if (!res.ok) throw new Error(`Ollama error ${res.status}`);
       const data = await res.json();
-      content = data.message?.content ?? '';
+      content = stripThinkTags(data.message?.content ?? '');
     } else {
-      const client = new OpenAI({
-        apiKey: process.env.OPENROUTER_API_KEY!,
-        baseURL: process.env.OPENROUTER_BASE_URL ?? 'https://openrouter.ai/api/v1',
-        defaultHeaders: {
-          'HTTP-Referer': process.env.OPENROUTER_SITE_URL ?? 'https://phishforge.ai',
-          'X-Title': 'PhishForge Training',
-        },
-      });
-      const freeModels = [
-        'deepseek/deepseek-r1:free',
-        'deepseek/deepseek-r1-0528:free',
-        'google/gemini-2.5-flash:free',
-        'meta-llama/llama-3.3-70b-instruct:free',
-        'qwen/qwen3-14b:free',
-        'qwen/qwen3-8b:free',
-        'mistralai/mistral-7b-instruct:free',
-      ];
-      const modelsToTry = [model, ...freeModels.filter(m => m !== model)];
-      let lastErr: Error | null = null;
-      let tokensUsed = 0;
-      let modelUsed = model;
-      for (const m of modelsToTry) {
-        try {
-          const completion = await client.chat.completions.create({
-            model: m,
-            messages: apiMessages,
-            temperature: 0.75,
-            max_tokens: 900,
-          });
-          content = completion.choices[0].message.content ?? '';
-          if (content) {
-            tokensUsed = completion.usage?.total_tokens ?? 0;
-            modelUsed = m;
-            break;
-          }
-        } catch (e: unknown) {
-          lastErr = e instanceof Error ? e : new Error(String(e));
-        }
-      }
-      if (!content) throw lastErr ?? new Error('All models failed.');
+      const result = await callOpenRouter(apiMessages, { maxTokens: 900, temperature: 0.75, primaryModel });
+      content = stripThinkTags(result.content);
       fetch(`${process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'}/api/usage/log`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ feature: 'training', tokensUsed, model: modelUsed }),
+        body: JSON.stringify({ feature: 'training', tokensUsed: result.tokens, model: result.model }),
       }).catch(() => {});
     }
 
