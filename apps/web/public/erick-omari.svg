@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200">
+  <rect width="200" height="200" fill="#0a0a0a"/>
+  <rect width="200" height="200" fill="none" stroke="#00ff41" stroke-width="1" opacity="0.3"/>
+  <!-- Grid lines -->
+  <line x1="0" y1="50" x2="200" y2="50" stroke="#00ff41" stroke-width="0.3" opacity="0.15"/>
+  <line x1="0" y1="100" x2="200" y2="100" stroke="#00ff41" stroke-width="0.3" opacity="0.15"/>
+  <line x1="0" y1="150" x2="200" y2="150" stroke="#00ff41" stroke-width="0.3" opacity="0.15"/>
+  <line x1="50" y1="0" x2="50" y2="200" stroke="#00ff41" stroke-width="0.3" opacity="0.15"/>
+  <line x1="100" y1="0" x2="100" y2="200" stroke="#00ff41" stroke-width="0.3" opacity="0.15"/>
+  <line x1="150" y1="0" x2="150" y2="200" stroke="#00ff41" stroke-width="0.3" opacity="0.15"/>
+  <!-- Avatar circle -->
+  <circle cx="100" cy="80" r="38" fill="#111" stroke="#00ff41" stroke-width="1.5" opacity="0.8"/>
+  <!-- Head -->
+  <circle cx="100" cy="72" r="22" fill="#1a1a1a" stroke="#00ff41" stroke-width="1" opacity="0.9"/>
+  <!-- Body -->
+  <ellipse cx="100" cy="130" rx="30" ry="20" fill="#1a1a1a" stroke="#00ff41" stroke-width="1" opacity="0.7"/>
+  <!-- Glow -->
+  <circle cx="100" cy="80" r="38" fill="none" stroke="#00ff41" stroke-width="1" opacity="0.15" filter="url(#glow)"/>
+  <!-- Corner brackets -->
+  <path d="M 8 8 L 8 20 M 8 8 L 20 8" stroke="#00ff41" stroke-width="1.5" fill="none" opacity="0.6"/>
+  <path d="M 192 8 L 192 20 M 192 8 L 180 8" stroke="#00ff41" stroke-width="1.5" fill="none" opacity="0.6"/>
+  <path d="M 8 192 L 8 180 M 8 192 L 20 192" stroke="#00ff41" stroke-width="1.5" fill="none" opacity="0.6"/>
+  <path d="M 192 192 L 192 180 M 192 192 L 180 192" stroke="#00ff41" stroke-width="1.5" fill="none" opacity="0.6"/>
+  <!-- Label -->
+  <text x="100" y="170" text-anchor="middle" font-family="monospace" font-size="9" fill="#00ff41" opacity="0.5">ERICK OMARI</text>
+  <text x="100" y="183" text-anchor="middle" font-family="monospace" font-size="7" fill="#00ff41" opacity="0.35">// FOUNDER</text>
+  <defs>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+      <feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+</svg>

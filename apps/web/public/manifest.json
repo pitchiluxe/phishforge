@@ -1,0 +1,15 @@
+{
+  "name": "PhishForge AI",
+  "short_name": "PhishForge",
+  "description": "AI-powered phishing simulation platform for authorized security awareness training.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#080808",
+  "theme_color": "#00ff41",
+  "orientation": "portrait-primary",
+  "icons": [
+    { "src": "/favicon.svg", "type": "image/svg+xml", "sizes": "any", "purpose": "any maskable" },
+    { "src": "/icon", "type": "image/png", "sizes": "32x32" },
+    { "src": "/apple-icon", "type": "image/png", "sizes": "180x180" }
+  ]
+}

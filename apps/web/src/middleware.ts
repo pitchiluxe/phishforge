@@ -1,0 +1,57 @@
+import { createServerClient } from '@supabase/ssr';
+import { NextResponse, type NextRequest } from 'next/server';
+
+export async function middleware(request: NextRequest) {
+  let response = NextResponse.next({ request });
+
+  const path = request.nextUrl.pathname;
+  const isApi = path.startsWith('/api/');
+  const isTracking = path.startsWith('/t/');
+
+  if (isApi || isTracking) return response;
+
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  // Skip all auth logic if Supabase is not configured
+  if (!supabaseUrl || !supabaseKey || supabaseUrl.includes('placeholder')) return response;
+
+  const supabase = createServerClient(supabaseUrl, supabaseKey, {
+    cookies: {
+      getAll() { return request.cookies.getAll(); },
+      setAll(cookiesToSet) {
+        cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
+        response = NextResponse.next({ request });
+        cookiesToSet.forEach(({ name, value, options }) => response.cookies.set(name, value, options));
+      },
+    },
+  });
+
+  const { data: { session } } = await supabase.auth.getSession();
+
+  const isAuth = path.startsWith('/login')
+    || path.startsWith('/register')
+    || path.startsWith('/forgot-password')
+    || path.startsWith('/reset-password');
+
+  const isRoot = path === '/';
+  const isDashboard = path.startsWith('/dashboard');
+
+  // Redirect logged-in users away from auth pages and root
+  if (session && (isAuth || isRoot)) {
+    return NextResponse.redirect(new URL('/dashboard', request.url));
+  }
+
+  // Redirect unauthenticated users away from dashboard routes
+  if (!session && isDashboard) {
+    const loginUrl = new URL('/login', request.url);
+    loginUrl.searchParams.set('next', path);
+    return NextResponse.redirect(loginUrl);
+  }
+
+  return response;
+}
+
+export const config = {
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)'],
+};

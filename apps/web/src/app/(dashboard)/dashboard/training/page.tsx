@@ -1,0 +1,70 @@
+'use client';
+
+import { useState } from 'react';
+import { Header } from '@/components/layout/header';
+import { TrainingSimulator } from '@/components/training/training-simulator';
+import { LabSimulator } from '@/components/training/lab-simulator';
+import { Target, FlaskConical } from 'lucide-react';
+
+const MONO = { fontFamily: 'var(--font-fira-code), monospace' } as const;
+
+const TABS = [
+  { id: 'scenarios', label: 'Scenarios', icon: Target, desc: 'Interactive attack simulations — AI plays the attacker, you respond' },
+  { id: 'lab', label: 'Lab', icon: FlaskConical, desc: 'Hands-on labs — AI instructor guides you step by step through real-world exercises' },
+] as const;
+
+type TabId = typeof TABS[number]['id'];
+
+export default function TrainingPage() {
+  const [activeTab, setActiveTab] = useState<TabId>('scenarios');
+  const tab = TABS.find(t => t.id === activeTab)!;
+
+  return (
+    <div className="animate-in">
+      <Header
+        title="AI Training"
+        subtitle={tab.desc}
+      />
+      <div style={{ padding: '0 24px 24px' }}>
+
+        {/* Tab bar */}
+        <div style={{ display: 'flex', gap: 0, marginBottom: 24, borderBottom: '1px solid rgba(0,255,65,0.1)', paddingTop: 16 }}>
+          {TABS.map(t => {
+            const active = t.id === activeTab;
+            const Icon = t.icon;
+            return (
+              <button
+                key={t.id}
+                onClick={() => setActiveTab(t.id)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 7,
+                  padding: '8px 20px', marginBottom: -1,
+                  background: 'transparent', border: 'none', cursor: 'pointer',
+                  borderBottom: active ? '2px solid #00ff41' : '2px solid transparent',
+                  ...MONO, fontSize: 12, fontWeight: active ? 700 : 400,
+                  color: active ? '#00ff41' : 'rgba(0,255,65,0.4)',
+                  transition: 'all 150ms',
+                  letterSpacing: '0.03em',
+                }}
+                onMouseEnter={e => { if (!active) e.currentTarget.style.color = 'rgba(0,255,65,0.8)'; }}
+                onMouseLeave={e => { if (!active) e.currentTarget.style.color = 'rgba(0,255,65,0.4)'; }}
+              >
+                <Icon size={13} />
+                {t.label}
+                {t.id === 'lab' && (
+                  <span style={{ ...MONO, fontSize: 8, color: '#00ff41', background: 'rgba(0,255,65,0.12)', border: '1px solid rgba(0,255,65,0.3)', borderRadius: 3, padding: '1px 5px', fontWeight: 700 }}>
+                    NEW
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Tab content */}
+        {activeTab === 'scenarios' && <TrainingSimulator />}
+        {activeTab === 'lab' && <LabSimulator />}
+      </div>
+    </div>
+  );
+}

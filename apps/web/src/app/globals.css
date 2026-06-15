@@ -1,0 +1,325 @@
+/* @import must come before @tailwind directives */
+@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;400;500;600;700&family=Fira+Sans:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* ── Light (fallback) ──────────────────────────────────── */
+  :root {
+    --background: 0 0% 98%;
+    --foreground: 133 5% 8%;
+    --card: 0 0% 100%;
+    --card-foreground: 133 5% 8%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 133 5% 8%;
+    --primary: 133 90% 30%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 180 60% 20%;
+    --secondary-foreground: 180 100% 70%;
+    --muted: 133 10% 93%;
+    --muted-foreground: 133 5% 45%;
+    --accent: 133 20% 90%;
+    --accent-foreground: 133 80% 25%;
+    --destructive: 0 84% 55%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 133 15% 85%;
+    --input: 133 15% 85%;
+    --ring: 133 90% 30%;
+    --radius: 0.25rem;
+    --sidebar-background: 133 15% 96%;
+    --sidebar-foreground: 133 5% 25%;
+    --sidebar-primary: 133 90% 30%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 133 20% 90%;
+    --sidebar-accent-foreground: 133 80% 25%;
+    --sidebar-border: 133 15% 85%;
+    --sidebar-ring: 133 90% 30%;
+  }
+
+  /* ── Dark / Cyberpunk (default) ────────────────────────── */
+  .dark {
+    --background: 0 0% 3%;
+    --foreground: 133 15% 88%;
+    --card: 133 15% 6%;
+    --card-foreground: 133 15% 88%;
+    --popover: 133 15% 6%;
+    --popover-foreground: 133 15% 88%;
+    --primary: 133 100% 50%;
+    --primary-foreground: 0 0% 0%;
+    --secondary: 180 60% 35%;
+    --secondary-foreground: 180 100% 85%;
+    --muted: 133 10% 10%;
+    --muted-foreground: 133 10% 55%;
+    --accent: 133 50% 9%;
+    --accent-foreground: 133 100% 60%;
+    --destructive: 0 72% 55%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 133 35% 15%;
+    --input: 133 20% 9%;
+    --ring: 133 100% 50%;
+    --sidebar-background: 0 0% 2%;
+    --sidebar-foreground: 133 12% 72%;
+    --sidebar-primary: 133 100% 50%;
+    --sidebar-primary-foreground: 0 0% 0%;
+    --sidebar-accent: 133 40% 8%;
+    --sidebar-accent-foreground: 133 100% 60%;
+    --sidebar-border: 133 30% 10%;
+    --sidebar-ring: 133 100% 50%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+    box-sizing: border-box;
+  }
+
+  html {
+    font-family: 'Fira Sans', 'Fira Code', system-ui, sans-serif;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: 'liga' 1, 'calt' 1;
+    font-family: 'Fira Sans', system-ui, sans-serif;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Fira Code', monospace;
+    @apply font-semibold tracking-tight;
+  }
+
+  code, pre, kbd, samp, .font-mono {
+    font-family: 'Fira Code', monospace !important;
+  }
+}
+
+/* ── Cyberpunk Utilities ──────────────────────────────────── */
+@layer utilities {
+
+  /* Neon text glow — matrix green */
+  .neon-text {
+    color: #00ff41;
+    text-shadow:
+      0 0 4px rgba(0, 255, 65, 0.9),
+      0 0 12px rgba(0, 255, 65, 0.6),
+      0 0 30px rgba(0, 255, 65, 0.3);
+  }
+
+  /* Neon text — cyan variant */
+  .neon-cyan {
+    color: #00ffff;
+    text-shadow:
+      0 0 4px rgba(0, 255, 255, 0.9),
+      0 0 12px rgba(0, 255, 255, 0.5),
+      0 0 28px rgba(0, 255, 255, 0.25);
+  }
+
+  /* Neon border glow */
+  .neon-border {
+    border-color: rgba(0, 255, 65, 0.4) !important;
+    box-shadow:
+      0 0 0 1px rgba(0, 255, 65, 0.2),
+      0 0 16px rgba(0, 255, 65, 0.08),
+      inset 0 0 16px rgba(0, 255, 65, 0.03);
+  }
+
+  /* Neon border — cyan */
+  .neon-border-cyan {
+    border-color: rgba(0, 255, 255, 0.35) !important;
+    box-shadow:
+      0 0 0 1px rgba(0, 255, 255, 0.15),
+      0 0 16px rgba(0, 255, 255, 0.06);
+  }
+
+  /* Primary text gradient */
+  .text-gradient {
+    background: linear-gradient(90deg, #00ff41 0%, #00ffff 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* Terminal card (glass replacement) */
+  .glass {
+    background: rgba(0, 255, 65, 0.03);
+    border: 1px solid rgba(0, 255, 65, 0.15);
+    backdrop-filter: blur(8px);
+    box-shadow:
+      0 0 20px rgba(0, 255, 65, 0.04),
+      inset 0 1px 0 rgba(0, 255, 65, 0.06);
+  }
+
+  /* Terminal card hover */
+  .glass:hover {
+    border-color: rgba(0, 255, 65, 0.28);
+    box-shadow:
+      0 0 28px rgba(0, 255, 65, 0.08),
+      inset 0 1px 0 rgba(0, 255, 65, 0.08);
+  }
+
+  /* Scanlines overlay — applied to body or a wrapper */
+  .scanlines {
+    position: relative;
+  }
+  .scanlines::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0, 0, 0, 0.18) 2px,
+      rgba(0, 0, 0, 0.18) 4px
+    );
+    pointer-events: none;
+    z-index: 9998;
+  }
+
+  /* Page entry animation */
+  .animate-in {
+    animation: fadeSlideUp 0.25s ease-out both;
+  }
+
+  /* Glitch text effect */
+  .glitch {
+    position: relative;
+    animation: glitch 4s infinite linear;
+  }
+
+  /* Terminal cursor blink */
+  .cursor-blink::after {
+    content: '█';
+    animation: blink 1s step-end infinite;
+    color: #00ff41;
+    margin-left: 2px;
+  }
+
+  /* Status dot — blinking online indicator */
+  .status-online {
+    background: #00ff41;
+    box-shadow: 0 0 6px #00ff41, 0 0 12px rgba(0, 255, 65, 0.5);
+    animation: blink-dot 2s ease-in-out infinite;
+  }
+}
+
+/* ── Keyframes ────────────────────────────────────────────── */
+@keyframes fadeSlideUp {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes glitch {
+  0%,  90%, 100% { transform: translate(0); filter: none; }
+  91%            { transform: translate(-2px, 1px); filter: hue-rotate(90deg); }
+  93%            { transform: translate(2px, -1px); filter: hue-rotate(-90deg); }
+  95%            { transform: translate(-1px, 2px); filter: brightness(1.4); }
+  97%            { transform: translate(1px, -2px); filter: hue-rotate(180deg); }
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
+}
+
+@keyframes blink-dot {
+  0%, 100% { opacity: 1; box-shadow: 0 0 6px #00ff41, 0 0 12px rgba(0, 255, 65, 0.5); }
+  50%       { opacity: 0.4; box-shadow: 0 0 2px #00ff41; }
+}
+
+@keyframes matrix-rain {
+  0%   { opacity: 0; transform: translateY(-100%); }
+  10%  { opacity: 1; }
+  90%  { opacity: 1; }
+  100% { opacity: 0; transform: translateY(100%); }
+}
+
+@keyframes neon-pulse {
+  0%, 100% { box-shadow: 0 0 8px rgba(0, 255, 65, 0.3), 0 0 20px rgba(0, 255, 65, 0.1); }
+  50%       { box-shadow: 0 0 16px rgba(0, 255, 65, 0.6), 0 0 40px rgba(0, 255, 65, 0.2); }
+}
+
+@keyframes shimmer {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+@keyframes spin {
+  0%   { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* ── Server-component hover states (CSS-only) ─────────────── */
+.settings-link:hover { border-color: rgba(0,255,65,0.3) !important; background: rgba(0,255,65,0.04) !important; }
+.feature-card:hover  { border-color: rgba(0,255,65,0.35) !important; box-shadow: 0 0 20px rgba(0,255,65,0.06) !important; }
+
+/* ── Scrollbar ────────────────────────────────────────────── */
+::-webkit-scrollbar        { width: 4px; height: 4px; }
+::-webkit-scrollbar-track  { background: transparent; }
+::-webkit-scrollbar-thumb  { background: rgba(0, 255, 65, 0.25); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(0, 255, 65, 0.5); }
+
+/* ── Focus ring — neon ────────────────────────────────────── */
+:focus-visible {
+  outline: 1px solid #00ff41;
+  outline-offset: 2px;
+}
+
+/* ── Selection ────────────────────────────────────────────── */
+::selection {
+  background: rgba(0, 255, 65, 0.25);
+  color: #00ff41;
+}
+
+/* ── Input autofill override ──────────────────────────────── */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 100px #050505 inset;
+  -webkit-text-fill-color: #d4d4d4;
+  caret-color: #00ff41;
+}
+
+/* ── Mobile / Touch optimisations ────────────────────────── */
+
+/* Smooth scrolling & momentum on iOS */
+* { -webkit-tap-highlight-color: transparent; }
+html { scroll-behavior: smooth; }
+main, aside, .overflow-y-auto { -webkit-overflow-scrolling: touch; }
+
+/* Minimum touch target size (44×44px) — only primary interactive controls */
+button:not(.no-min-size),
+[role="button"]:not(.no-min-size) {
+  min-height: 44px;
+  min-width: 44px;
+}
+/* Nav links and icon buttons opt out of the minimum */
+nav a, .nav-link, nav button, aside a, aside button { min-height: unset; min-width: unset; }
+
+/* Prevent font size inflation on iPhone landscape */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+
+/* ── Responsive dashboard layout ─────────────────────────── */
+@media (max-width: 767px) {
+  /* Stack sidebar behind content on mobile — shell handles translateX */
+  aside { min-width: 224px !important; width: 224px !important; }
+
+  /* Reduce padding on mobile */
+  .p-6 { padding: 1rem !important; }
+  .px-6 { padding-left: 1rem !important; padding-right: 1rem !important; }
+
+  /* Single-column grids on mobile */
+  .grid.lg\:grid-cols-3 { grid-template-columns: 1fr !important; }
+  .grid.md\:grid-cols-2 { grid-template-columns: 1fr !important; }
+}
+
+/* ── Auth pages mobile ────────────────────────────────────── */
+@media (max-width: 640px) {
+  /* Full-width terminal window on small screens */
+  .auth-terminal { margin: 1rem !important; }
+  /* Stack two-column name/org fields */
+  .auth-grid-2col { grid-template-columns: 1fr !important; }
+}
