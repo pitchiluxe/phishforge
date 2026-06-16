@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { callOpenRouter, stripThinkTags } from '@/lib/ai/openrouter';
+import { callOpenRouter, extractFinalAnswer, trimHistory } from '@/lib/ai/openrouter';
 
 const SYSTEM_PROMPT = `You are CyberLM, an elite incident response copilot built into PhishForge. You help security analysts and incident responders analyze cybersecurity incidents in real-time.
 
@@ -75,10 +75,13 @@ ${iocs ? `Observed IOCs: ${iocs}` : ''}
 
 Provide a complete structured incident response analysis.`;
 
+  const history = trimHistory([
+    ...messages.slice(0, -1),
+    { role: 'user', content: userMessage },
+  ], 10);
   const apiMessages = [
     { role: 'system' as const, content: SYSTEM_PROMPT },
-    ...messages.slice(0, -1).map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content })),
-    { role: 'user' as const, content: userMessage },
+    ...history,
   ];
 
   const startMs = Date.now();
@@ -97,7 +100,7 @@ Provide a complete structured incident response analysis.`;
       });
       if (!res.ok) throw new Error(`Ollama error ${res.status}`);
       const data = await res.json();
-      content = stripThinkTags(data?.message?.content ?? '');
+      content = extractFinalAnswer(data?.message?.content ?? '');
       tokensUsed = (data?.prompt_eval_count ?? 0) + (data?.eval_count ?? 0);
       modelUsed = primaryModel ?? 'llama3.2';
     } else {
@@ -106,7 +109,7 @@ Provide a complete structured incident response analysis.`;
         temperature: 0.4,
         primaryModel,
       });
-      content = stripThinkTags(result.content);
+      content = extractFinalAnswer(result.content);
       tokensUsed = result.tokens;
       modelUsed = result.model;
     }

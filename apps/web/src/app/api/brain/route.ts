@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { callOpenRouter, stripThinkTags } from '@/lib/ai/openrouter';
+import { callOpenRouter, extractFinalAnswer, trimHistory } from '@/lib/ai/openrouter';
 
 export interface BrainSource {
   id: string;
@@ -60,9 +60,11 @@ export async function POST(req: NextRequest) {
   );
 
   const systemPrompt = buildSystemPrompt(sources as BrainSource[]);
+  // Trim to last 10 turns and ensure first message is from user (OpenRouter requirement)
+  const history = trimHistory(messages, 10);
   const apiMessages = [
     { role: 'system' as const, content: systemPrompt },
-    ...messages.map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content })),
+    ...history,
   ];
 
   const startMs = Date.now();
@@ -81,7 +83,7 @@ export async function POST(req: NextRequest) {
       });
       if (!res.ok) throw new Error(`Ollama error ${res.status}`);
       const data = await res.json();
-      content = stripThinkTags(data?.message?.content ?? '');
+      content = extractFinalAnswer(data?.message?.content ?? '');
       tokensUsed = (data?.prompt_eval_count ?? 0) + (data?.eval_count ?? 0);
       modelUsed = primaryModel ?? 'llama3.2';
     } else {
@@ -90,7 +92,7 @@ export async function POST(req: NextRequest) {
         temperature: 0.7,
         primaryModel,
       });
-      content = stripThinkTags(result.content);
+      content = extractFinalAnswer(result.content);
       tokensUsed = result.tokens;
       modelUsed = result.model;
     }
