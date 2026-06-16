@@ -41,7 +41,7 @@ export function UsageBar({ used, limit, plan }: UsageBarProps) {
             color: '#00ff41',
             opacity: 0.8,
           }}>
-            Monthly simulations
+            Monthly campaigns
           </span>
           <span style={{
             fontFamily: 'var(--font-fira-code), monospace',

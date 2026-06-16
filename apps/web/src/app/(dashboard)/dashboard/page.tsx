@@ -4,6 +4,7 @@ import { OverviewStats } from '@/components/dashboard/overview-stats';
 import { RecentCampaigns } from '@/components/dashboard/recent-campaigns';
 import { ThreatFeed } from '@/components/dashboard/threat-feed';
 import { UsageBar } from '@/components/dashboard/usage-bar';
+import { LatestNews } from '@/components/dashboard/latest-news';
 
 export default async function DashboardPage() {
   const supabase = await getSafeClient();
@@ -30,6 +31,7 @@ export default async function DashboardPage() {
           <RecentCampaigns campaigns={campaigns as Parameters<typeof RecentCampaigns>[0]['campaigns']} />
           <ThreatFeed threats={threats as Parameters<typeof ThreatFeed>[0]['threats']} />
         </div>
+        <LatestNews />
       </div>
       <style>{`
         .dashboard-main-grid { display:grid; grid-template-columns:minmax(0,2fr) minmax(0,1fr); gap:16px; }

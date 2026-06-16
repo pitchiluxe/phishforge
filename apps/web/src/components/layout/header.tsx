@@ -1,8 +1,9 @@
 'use client';
 
-import { Bell, Terminal, Menu, X, Shield, AlertTriangle, Trophy, Zap, BookOpen } from 'lucide-react';
+import { Bell, Terminal, Menu, X, Shield, AlertTriangle, Trophy, Zap, BookOpen, Users } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useDashboard } from './dashboard-context';
+import { useLiveCount } from '@/hooks/use-live-count';
 
 const MONO = { fontFamily: 'var(--font-fira-code), monospace' } as const;
 
@@ -83,6 +84,7 @@ interface HeaderProps {
 export function Header({ title, subtitle, children }: HeaderProps) {
   const [time, setTime] = useState('');
   const [mounted, setMounted] = useState(false);
+  const liveCount = useLiveCount();
   const [notifOpen, setNotifOpen] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>(INITIAL_NOTIFICATIONS);
   const bellRef = useRef<HTMLButtonElement>(null);
@@ -182,19 +184,26 @@ export function Header({ title, subtitle, children }: HeaderProps) {
           </span>
         )}
 
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 5,
-          padding: '3px 8px', borderRadius: 3,
-          border: '1px solid rgba(0,255,65,0.2)',
-          background: 'rgba(0,255,65,0.04)',
-        }}>
-          <span style={{
-            width: 5, height: 5, borderRadius: '50%',
-            background: '#00ff41', boxShadow: '0 0 6px #00ff41',
-            display: 'inline-block', animation: 'blink-dot 2s ease-in-out infinite',
-          }} />
-          <span style={{ ...MONO, fontSize: 9, color: '#00ff41', letterSpacing: '0.15em' }}>LIVE</span>
-        </div>
+        {/* Live user count */}
+        {mounted && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            padding: '3px 10px', borderRadius: 3,
+            border: '1px solid rgba(0,255,65,0.2)',
+            background: 'rgba(0,255,65,0.04)',
+          }}>
+            <span style={{
+              width: 5, height: 5, borderRadius: '50%',
+              background: '#00ff41', boxShadow: '0 0 6px #00ff41',
+              display: 'inline-block', animation: 'blink-dot 2s ease-in-out infinite',
+            }} />
+            <Users size={10} style={{ color: '#00ff41', opacity: 0.7 }} />
+            <span style={{ ...MONO, fontSize: 9, color: '#00ff41', letterSpacing: '0.1em', fontWeight: 700 }}>
+              {liveCount}
+            </span>
+            <span style={{ ...MONO, fontSize: 9, color: '#00ff41', opacity: 0.5, letterSpacing: '0.12em' }}>LIVE</span>
+          </div>
+        )}
 
         {/* Bell */}
         <div style={{ position: 'relative' }}>

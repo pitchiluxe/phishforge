@@ -6,7 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import {
   Shield, LayoutDashboard, Mail, FileText, BookOpen, BarChart3,
   Settings, Users, Brain, AlertTriangle, CreditCard, LogOut, ChevronLeft, X,
-  GraduationCap, Target, Trophy, Cpu, BrainCircuit,
+  GraduationCap, Target, Trophy, Cpu, BrainCircuit, Newspaper,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { createClient } from '@/lib/supabase/client';
@@ -23,6 +23,7 @@ const NAV_ITEMS = [
   { href: '/dashboard/knowledge', label: 'Knowledge Base', icon: BookOpen },
   { href: '/dashboard/threat-intel', label: 'Threat Intel', icon: AlertTriangle },
   { href: '/dashboard/analytics', label: 'Analytics', icon: BarChart3 },
+  { href: '/dashboard/cybernews', label: 'CyberNews', icon: Newspaper },
 ] as const;
 
 const BOTTOM_ITEMS = [
@@ -158,37 +159,44 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
           <NavItem key={item.href} item={item} active={isActive(item.href, 'exact' in item ? item.exact : undefined)} collapsed={collapsed} />
         ))}
 
-        {/* CyberBrain — special button (not a nav link) */}
-        <div style={{ marginTop: 1, borderTop: '1px solid rgba(0,255,65,0.08)', paddingTop: 1 }}>
-          <button
-            onClick={toggleBrain}
-            title="CyberBrain"
-            style={{
-              display: 'flex', alignItems: 'center', gap: 8,
-              padding: collapsed ? '8px 0' : '7px 10px',
-              justifyContent: collapsed ? 'center' : 'flex-start',
-              borderRadius: 4, width: '100%',
-              background: brainOpen ? 'rgba(0,255,65,0.12)' : 'transparent',
-              border: brainOpen ? '1px solid rgba(0,255,65,0.25)' : '1px solid transparent',
-              cursor: 'pointer', fontFamily: 'var(--font-fira-code), monospace',
-              fontSize: 12, fontWeight: brainOpen ? 600 : 400,
-              color: brainOpen ? '#00ff41' : '#00ff41',
-              opacity: brainOpen ? 1 : 0.55,
-              boxShadow: brainOpen ? '0 0 10px rgba(0,255,65,0.1)' : 'none',
-              transition: 'all 0.15s',
-            }}
-            onMouseEnter={e => { e.currentTarget.style.opacity = '1'; }}
-            onMouseLeave={e => { e.currentTarget.style.opacity = brainOpen ? '1' : '0.55'; }}
-          >
-            <BrainCircuit size={collapsed ? 16 : 14} style={{ flexShrink: 0, filter: brainOpen ? 'drop-shadow(0 0 5px rgba(0,255,65,0.6))' : 'none' }} />
-            {!collapsed && <span>CyberBrain</span>}
-            {!collapsed && brainOpen && (
-              <span style={{ marginLeft: 'auto', fontSize: 9, background: '#00ff41', color: '#000', borderRadius: 3, padding: '1px 5px', fontWeight: 700 }}>
-                OPEN
-              </span>
-            )}
-          </button>
-        </div>
+        {/* CyberBrain — special button styled like a nav item */}
+        <button
+          onClick={toggleBrain}
+          title="CyberBrain"
+          style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+            padding: collapsed ? '8px 0' : '7px 10px',
+            justifyContent: collapsed ? 'center' : 'flex-start',
+            borderRadius: 4, width: '100%',
+            background: brainOpen ? '#00ff41' : 'transparent',
+            border: '1px solid transparent',
+            cursor: 'pointer', fontFamily: 'var(--font-fira-code), monospace',
+            fontSize: 12, fontWeight: brainOpen ? 600 : 400,
+            color: brainOpen ? '#000' : '#00ff41',
+            opacity: 1,
+            boxShadow: brainOpen ? '0 0 12px rgba(0,255,65,0.4)' : 'none',
+            transition: 'all 0.15s',
+          }}
+          onMouseEnter={e => {
+            if (!brainOpen) {
+              e.currentTarget.style.background = 'rgba(0,255,65,0.07)';
+              e.currentTarget.style.color = '#00ff41';
+            }
+          }}
+          onMouseLeave={e => {
+            if (!brainOpen) {
+              e.currentTarget.style.background = 'transparent';
+            }
+          }}
+        >
+          <BrainCircuit size={collapsed ? 16 : 14} style={{ flexShrink: 0, opacity: brainOpen ? 0.85 : 0.7 }} />
+          {!collapsed && <span>CyberBrain</span>}
+          {!collapsed && brainOpen && (
+            <span style={{ marginLeft: 'auto', fontSize: 9, background: 'rgba(0,0,0,0.3)', color: '#000', borderRadius: 3, padding: '1px 5px', fontWeight: 700 }}>
+              OPEN
+            </span>
+          )}
+        </button>
       </nav>
 
       {/* Bottom nav */}
