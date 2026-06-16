@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import OpenAI from 'openai';
+import { callOpenRouter, extractFinalAnswer, trimHistory } from '@/lib/ai/openrouter';
 
 const INSTRUCTOR_PROMPT = `You are CyberLab Instructor, an expert cybersecurity mentor running hands-on interactive security labs inside the PhishForge platform.
 
@@ -21,32 +21,11 @@ Lab format:
 
 Always stay in the instructor role. Never break character. Never give unsolicited answers.`;
 
-const FREE_MODELS = [
-  'deepseek/deepseek-r1:free',
-  'google/gemini-2.0-flash-exp:free',
-  'meta-llama/llama-3.3-70b-instruct:free',
-  'meta-llama/llama-3.1-8b-instruct:free',
-  'qwen/qwen3-8b:free',
-  'mistralai/mistral-7b-instruct:free',
-];
-
-function extractFinalAnswer(text: string): string {
-  const thinkEnd = text.lastIndexOf('</think>');
-  if (thinkEnd !== -1) return text.slice(thinkEnd + 8).trim();
-  return text.trim();
-}
-
 export async function POST(req: NextRequest) {
   const body = await req.json();
   const { labId, labTitle, labDescription, messages = [] } = body;
 
   const provider = process.env.DEFAULT_AI_PROVIDER ?? 'openrouter';
-  const defaultModel = process.env.OPENROUTER_DEFAULT_MODEL ?? 'deepseek/deepseek-r1:free';
-
-  const systemMsg = {
-    role: 'system' as const,
-    content: INSTRUCTOR_PROMPT,
-  };
 
   const initMsg = messages.length === 0
     ? {
@@ -55,8 +34,7 @@ export async function POST(req: NextRequest) {
       }
     : null;
 
-  const apiMessages = [
-    systemMsg,
+  const rawMessages = [
     ...(initMsg ? [initMsg] : []),
     ...messages.map((m: { role: string; content: string }) => ({
       role: m.role as 'user' | 'assistant',
@@ -67,7 +45,7 @@ export async function POST(req: NextRequest) {
   try {
     let content = '';
     let tokensUsed = 0;
-    let modelUsed = defaultModel;
+    let modelUsed = '';
 
     if (provider === 'ollama') {
       const ollamaUrl = process.env.OLLAMA_BASE_URL ?? 'http://localhost:11434';
@@ -77,7 +55,12 @@ export async function POST(req: NextRequest) {
         res = await fetch(`${ollamaUrl}/api/chat`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ model: ollamaModel, messages: apiMessages, stream: false, options: { temperature: 0.5, num_predict: 1200 } }),
+          body: JSON.stringify({
+            model: ollamaModel,
+            messages: [{ role: 'system', content: INSTRUCTOR_PROMPT }, ...rawMessages],
+            stream: false,
+            options: { temperature: 0.5, num_predict: 1200 },
+          }),
           signal: AbortSignal.timeout(120_000),
         });
       } catch {
@@ -89,37 +72,15 @@ export async function POST(req: NextRequest) {
       tokensUsed = (data.prompt_eval_count ?? 0) + (data.eval_count ?? 0);
       modelUsed = ollamaModel;
     } else {
-      const client = new OpenAI({
-        apiKey: process.env.OPENROUTER_API_KEY!,
-        baseURL: process.env.OPENROUTER_BASE_URL ?? 'https://openrouter.ai/api/v1',
-        defaultHeaders: {
-          'HTTP-Referer': process.env.OPENROUTER_SITE_URL ?? 'https://phishforge.ai',
-          'X-Title': 'PhishForge Lab',
-        },
-      });
-
-      const modelsToTry = [defaultModel, ...FREE_MODELS.filter(m => m !== defaultModel)];
-      let lastErr: Error | null = null;
-
-      for (const m of modelsToTry) {
-        try {
-          const res = await client.chat.completions.create({
-            model: m,
-            messages: apiMessages,
-            temperature: 0.5,
-            max_tokens: 1200,
-          });
-          content = res.choices[0].message.content ?? '';
-          if (content) {
-            tokensUsed = res.usage?.total_tokens ?? 0;
-            modelUsed = m;
-            break;
-          }
-        } catch (e: unknown) {
-          lastErr = e instanceof Error ? e : new Error(String(e));
-        }
-      }
-      if (!content) throw lastErr ?? new Error('All models failed.');
+      const history = trimHistory(rawMessages, 10);
+      const apiMessages = [
+        { role: 'system' as const, content: INSTRUCTOR_PROMPT },
+        ...history,
+      ];
+      const result = await callOpenRouter(apiMessages, { maxTokens: 1200, temperature: 0.5 });
+      content = extractFinalAnswer(result.content);
+      tokensUsed = result.tokens;
+      modelUsed = result.model;
     }
 
     fetch(`${process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'}/api/usage/log`, {
@@ -128,7 +89,7 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify({ feature: 'training', tokensUsed, model: modelUsed }),
     }).catch(() => {});
 
-    return NextResponse.json({ message: extractFinalAnswer(content), tokensUsed, model: modelUsed });
+    return NextResponse.json({ message: content, tokensUsed, model: modelUsed });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

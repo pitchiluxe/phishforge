@@ -65,8 +65,16 @@ async function processDocument(docId: string, file: File, orgId: string, supabas
     const { Pinecone } = await import('@pinecone-database/pinecone');
     const OpenAI = (await import('openai')).default;
 
+    const apiKey =
+      process.env.OPENROUTER_API_KEY ||
+      process.env.ANTHROPIC_AUTH_TOKEN ||
+      process.env.ANTHROPIC_API_KEY ||
+      process.env.OPENAI_API_KEY ||
+      '';
+    if (!apiKey) throw new Error('No AI API key configured');
+
     const openai = new OpenAI({
-      apiKey: process.env.OPENROUTER_API_KEY!,
+      apiKey,
       baseURL: process.env.OPENROUTER_BASE_URL ?? 'https://openrouter.ai/api/v1',
     });
 

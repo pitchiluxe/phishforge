@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import OpenAI from 'openai';
+import { callOpenRouter, extractFinalAnswer } from '@/lib/ai/openrouter';
 
 const RECENT_TOPICS = [
   'AI-powered social engineering and deepfake attacks in 2025',
@@ -22,6 +22,12 @@ const RECENT_TOPICS = [
   'Secure coding in AI-generated code — GitHub Copilot risks',
   'Cloud storage misconfigurations: S3, Azure Blob, GCS data exposure',
   'Adversarial AI — evading ML-based security controls',
+  // CrowdStrike / EDR topics
+  'CrowdStrike Falcon Sensor architecture and tamper protection',
+  'BYOVD attacks bypassing EDR kernel defenses in 2025',
+  'CrowdStrike Falcon Identity Threat Protection and Kerberoasting detection',
+  'EDR telemetry evasion: process hollowing and direct syscall techniques',
+  'CrowdStrike RTR (Real Time Response) for live endpoint forensics',
 ];
 
 const SYSTEM_PROMPT = `You are a senior cybersecurity writer creating articles for PhishForge's knowledge base — a professional security awareness training platform used by enterprise security teams.
@@ -72,20 +78,6 @@ REQUIREMENTS:
 - Minimum 800 words
 - Focus on 2024–2025 relevance — NOT outdated content`;
 
-function extractFinalAnswer(text: string): string {
-  const thinkEnd = text.lastIndexOf('</think>');
-  if (thinkEnd !== -1) return text.slice(thinkEnd + 8).trim();
-  return text.trim();
-}
-
-const FREE_MODELS = [
-  'deepseek/deepseek-r1:free',
-  'google/gemini-2.0-flash-exp:free',
-  'meta-llama/llama-3.3-70b-instruct:free',
-  'qwen/qwen3-8b:free',
-  'mistralai/mistral-7b-instruct:free',
-];
-
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
@@ -93,7 +85,6 @@ export async function POST(req: NextRequest) {
     const category: string = body.category || 'Threat Intelligence';
 
     const provider = process.env.DEFAULT_AI_PROVIDER ?? 'openrouter';
-    const defaultModel = process.env.OPENROUTER_DEFAULT_MODEL ?? 'deepseek/deepseek-r1:free';
 
     const userPrompt = `Write a comprehensive cybersecurity knowledge base article about: **${topic}**
 
@@ -103,7 +94,7 @@ Date context: June 2025 — focus on current threats, recent incidents, and 2025
 Return ONLY the Markdown article content. Do not add any preamble or explanation outside the article itself.`;
 
     let content = '';
-    let modelUsed = defaultModel;
+    let modelUsed = '';
 
     if (provider === 'ollama') {
       const ollamaUrl = process.env.OLLAMA_BASE_URL ?? 'http://localhost:11434';
@@ -127,45 +118,22 @@ Return ONLY the Markdown article content. Do not add any preamble or explanation
       content = data.message?.content ?? '';
       modelUsed = ollamaModel;
     } else {
-      const client = new OpenAI({
-        apiKey: process.env.OPENROUTER_API_KEY!,
-        baseURL: process.env.OPENROUTER_BASE_URL ?? 'https://openrouter.ai/api/v1',
-        defaultHeaders: {
-          'HTTP-Referer': process.env.OPENROUTER_SITE_URL ?? 'https://phishforge.ai',
-          'X-Title': 'PhishForge Knowledge Base',
-        },
-      });
-
-      const modelsToTry = [defaultModel, ...FREE_MODELS.filter(m => m !== defaultModel)];
-      let lastErr: Error | null = null;
-
-      for (const m of modelsToTry) {
-        try {
-          const res = await client.chat.completions.create({
-            model: m,
-            messages: [
-              { role: 'system', content: SYSTEM_PROMPT },
-              { role: 'user', content: userPrompt },
-            ],
-            temperature: 0.7,
-            max_tokens: 2000,
-          });
-          content = res.choices[0].message.content ?? '';
-          if (content) { modelUsed = m; break; }
-        } catch (e: unknown) {
-          lastErr = e instanceof Error ? e : new Error(String(e));
-        }
-      }
-      if (!content) throw lastErr ?? new Error('All models failed.');
+      const result = await callOpenRouter(
+        [
+          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'user', content: userPrompt },
+        ],
+        { maxTokens: 2000, temperature: 0.7 },
+      );
+      content = result.content;
+      modelUsed = result.model;
     }
 
     content = extractFinalAnswer(content);
 
-    // Extract title from first ## heading
     const titleMatch = content.match(/^##\s+(.+)$/m);
     const title = titleMatch ? titleMatch[1].trim() : topic;
 
-    // Generate summary from first paragraph after title
     const bodyAfterTitle = content.replace(/^##\s+.+\n+/, '').replace(/---\n/g, '').trim();
     const firstPara = bodyAfterTitle.split('\n').find(l => l.trim() && !l.startsWith('#') && !l.startsWith('-'));
     const summary = firstPara ? firstPara.slice(0, 200) : `AI-generated article about ${topic}`;
