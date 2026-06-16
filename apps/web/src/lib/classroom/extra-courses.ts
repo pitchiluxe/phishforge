@@ -2312,10 +2312,444 @@ BYOVD Prevention Stack
         'CrowdStrike OverWatch has detected RTCore64.sys loaded by a non-system process on your most critical domain controller. You have 5 minutes before the attacker patches kernel callbacks and goes dark. The DC cannot be rebooted. You have Falcon RTR access. Walk through your live response: what you collect first, how you verify Falcon sensor integrity, whether and how to isolate the DC, and your containment decision when rebooting is not an option.'),
 
       LAB('cs-lab2', 'Falcon Identity: Kerberoasting Detection & Hardening', 170,
+
         `Falcon Identity Threat Protection has fired: KerberoastingDetected — 47 TGS requests for RC4-encrypted tickets (etype 23) targeting MSSQL, HTTP, and backup SPNs from workstation WS-DEV-041 in under 60 seconds. Lateral movement to FS-CORP-01 was detected 12 minutes later using cracked SQL service account credentials.
 
 Conduct full incident response and hardening: (1) Explain the Kerberoasting kill chain (T1558.003) — AS-REQ → TGT → TGS with RC4 preference → offline Hashcat cracking — and why etype 23 is the critical indicator. (2) Describe how Falcon Identity Threat Protection's DC sensor captures TGS request volume and etype anomalies to fire the detection. (3) Immediate containment: isolate WS-DEV-041 via Falcon RTR contain command, force password reset on all targeted SPNs, and invalidate active Kerberos tickets. (4) Hardening: enforce AES256/AES128-only Kerberos (msDS-SupportedEncryptionTypes = 24) on all service accounts, migrate service accounts to Group Managed Service Accounts (gMSA) with automatic 30-day password rotation. (5) Write a Falcon Identity custom detection rule to alert on > 10 RC4-encrypted TGS requests from a single host within a 5-minute window.`,
         ['Kerberoasting', 'T1558.003', 'RC4 etype 23', 'TGS', 'SPN', 'Falcon Identity', 'gMSA', 'AES Kerberos', 'msDS-SupportedEncryptionTypes', 'Hashcat']),
+    ],
+  },
+
+  // ══════════════════════════════════════════════════
+  // DOMAIN: POWERSHELL FOR CYBERSECURITY
+  // ══════════════════════════════════════════════════
+
+  {
+    id: 'powershell-security',
+    title: 'PowerShell for Cybersecurity',
+    description: 'Master PowerShell as a security professional — AD auditing, threat hunting, log analysis, DFIR, and defensive hardening.',
+    category: 'devsecops',
+    difficulty: 'intermediate',
+    accentColor: '#60a5fa',
+    modules: [
+
+      L('ps-l1', 'PowerShell Security Fundamentals', 100, `## PowerShell for Security Professionals
+
+PowerShell is the most powerful built-in tool available to Windows security teams — and to attackers. Mastering it is non-negotiable for modern defenders.
+
+### Why PowerShell Matters for Security
+
+PowerShell is deeply integrated into Windows management. It can:
+- Query every aspect of a running system (processes, services, registry, network)
+- Interact with Active Directory without extra tools
+- Parse and search event logs with surgical precision
+- Automate IR playbooks and evidence collection
+- Detect fileless malware that leaves no disk artifacts
+
+It is also the preferred tool for attackers performing living-off-the-land (LotL) attacks, making PowerShell monitoring a critical detection priority.
+
+### Security-Relevant PowerShell Commands
+
+\`\`\`powershell
+# Check PowerShell version (older = less secure)
+$PSVersionTable
+
+# View current execution policy
+Get-ExecutionPolicy -List
+
+# Find all running processes
+Get-Process | Select-Object Name, Id, Path, StartTime
+
+# List all network connections
+Get-NetTCPConnection -State Established
+
+# Query Windows event logs
+Get-WinEvent -LogName Security -MaxEvents 50
+\`\`\`
+
+### Execution Policy — Security Implications
+
+| Policy | Risk Level | Description |
+|--------|-----------|-------------|
+| Restricted | Lowest | No scripts allowed |
+| AllSigned | Low | Only signed scripts |
+| RemoteSigned | Medium | Unsigned local OK |
+| Unrestricted | High | All scripts run |
+| Bypass | Critical | No checks at all |
+
+**Attacker trick:** \`powershell.exe -ExecutionPolicy Bypass -File malware.ps1\` bypasses the policy entirely.
+
+### PowerShell Remoting
+
+\`\`\`powershell
+# Enter remote session (used by attackers for lateral movement)
+Enter-PSSession -ComputerName WIN-DC01 -Credential (Get-Credential)
+
+# Run command on multiple machines
+Invoke-Command -ComputerName WIN-DC01,WIN-SRV01 -ScriptBlock { Get-Process }
+\`\`\`
+
+**Security note:** WinRM (port 5985/5986) enables remoting. Monitor for unauthorized remote sessions using Event ID 4656 and WinRM event log.`),
+
+      L('ps-l2', 'System Enumeration with PowerShell', 110, `## System Enumeration with PowerShell
+
+Every incident response begins with understanding what's running on the system. These cmdlets are your first tools.
+
+### Process Enumeration
+
+\`\`\`powershell
+# Full process list with paths — suspicious if path is TEMP or AppData
+Get-Process | Select-Object Name, Id, Path, Company, StartTime |
+  Sort-Object StartTime -Descending
+
+# Processes without a path (fileless / injected)
+Get-Process | Where-Object {$_.Path -eq $null}
+
+# Find processes running from suspicious locations
+Get-Process | Where-Object {
+  $_.Path -like "*\\Temp\\*" -or
+  $_.Path -like "*\\AppData\\*" -or
+  $_.Path -like "*\\Downloads\\*"
+}
+
+# Map process to parent (catch process hollowing)
+Get-CimInstance Win32_Process | Select-Object ProcessId, ParentProcessId, Name, CommandLine |
+  Sort-Object ParentProcessId
+\`\`\`
+
+### Service Enumeration
+
+\`\`\`powershell
+# All services and their start type
+Get-Service | Where-Object {$_.Status -eq "Running"} |
+  Select-Object Name, DisplayName, StartType
+
+# Services running as SYSTEM (high privilege — audit these)
+Get-WmiObject Win32_Service |
+  Where-Object {$_.StartName -eq "LocalSystem"} |
+  Select-Object Name, PathName
+
+# Recently created services (T1543.003 — persistence)
+Get-WinEvent -FilterHashtable @{LogName='System'; Id=7045} |
+  Select-Object -First 20
+\`\`\`
+
+### Persistence Locations to Check
+
+\`\`\`powershell
+# Registry Run keys (T1547.001)
+Get-ItemProperty "HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run"
+Get-ItemProperty "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run"
+
+# Scheduled tasks not from Microsoft
+Get-ScheduledTask |
+  Where-Object {$_.TaskPath -notlike "\\Microsoft\\*" -and $_.State -eq "Ready"} |
+  Select-Object TaskName, TaskPath
+
+# Startup folders
+Get-ChildItem "C:\\Users\\*\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Startup"
+Get-ChildItem "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Startup"
+\`\`\``),
+
+      LAB('ps-lab1', 'System Enumeration Lab — Hunt for Persistence', 150,
+        `You've received an alert that WIN-WKS04 in the CONTOSO.LOCAL domain may have been compromised. Initial IOC: powershell.exe running from C:\\Users\\john.smith\\AppData\\Local\\Temp\\ with no visible parent process.
+
+Your task is to enumerate the system to identify persistence mechanisms and suspicious activity:
+
+1. List all running processes and identify those running from unusual locations (Temp, AppData, Downloads). What does a process with no Path value (null) indicate?
+
+2. Check all Registry Run keys (HKLM and HKCU). Explain what each key controls and why attackers use them for persistence (MITRE T1547.001).
+
+3. Enumerate all scheduled tasks not under Microsoft's path. What PowerShell command creates a scheduled task, and what would a malicious one look like?
+
+4. List recently created Windows services (Event ID 7045). Why is a new service created without a proper Description field suspicious?
+
+5. Check the Startup folders for both the system and all user profiles. What is the difference between HKLM Run and the Startup folder as persistence mechanisms?
+
+Provide the specific PowerShell commands for each task and explain what you would look for in the output.`,
+        ['Get-Process', 'Get-CimInstance', 'Win32_Process', 'Get-ItemProperty', 'HKLM Run', 'Get-ScheduledTask', 'T1547.001', 'persistence', 'Temp', 'AppData', 'Event ID 7045', 'Get-WinEvent']),
+
+      L('ps-l3', 'Active Directory Security Auditing with PowerShell', 130, `## Active Directory Security Auditing with PowerShell
+
+Active Directory misconfigurations are the #1 path to domain compromise. PowerShell + RSAT is the fastest way to audit your domain.
+
+### Prerequisites
+
+\`\`\`powershell
+# Install AD PowerShell module (run on Domain Controller or with RSAT)
+Install-WindowsFeature RSAT-AD-PowerShell
+Import-Module ActiveDirectory
+\`\`\`
+
+### Critical Security Audits
+
+**1. Privileged Group Membership**
+\`\`\`powershell
+# Who's in Domain Admins? (should be minimal)
+Get-ADGroupMember "Domain Admins" -Recursive |
+  Select-Object Name, SamAccountName, ObjectClass
+
+# Enterprise Admins (most powerful group in forest)
+Get-ADGroupMember "Enterprise Admins" -Recursive | Select-Object Name
+
+# Schema Admins (should be empty when not in use)
+Get-ADGroupMember "Schema Admins" | Select-Object Name
+\`\`\`
+
+**2. Password Policy Vulnerabilities**
+\`\`\`powershell
+# Accounts with password never expires (T1078 — valid account abuse)
+Get-ADUser -Filter {PasswordNeverExpires -eq $true -and Enabled -eq $true} |
+  Select-Object Name, SamAccountName, PasswordLastSet
+
+# Accounts where password is NOT required
+Get-ADUser -Filter {PasswordNotRequired -eq $true} | Select-Object Name
+
+# Stale accounts not logged in for 90+ days (should be disabled)
+$cutoff = (Get-Date).AddDays(-90)
+Get-ADUser -Filter {LastLogonDate -lt $cutoff -and Enabled -eq $true} -Properties LastLogonDate |
+  Select-Object Name, LastLogonDate | Sort-Object LastLogonDate
+\`\`\`
+
+**3. Service Principal Names (Kerberoasting Attack Surface)**
+\`\`\`powershell
+# Find all accounts with SPNs — these are Kerberoasting targets
+Get-ADUser -Filter {ServicePrincipalName -ne "$null"} -Properties ServicePrincipalName |
+  Select-Object Name, SamAccountName, ServicePrincipalName
+
+# Service accounts in privileged groups (dangerous combination)
+Get-ADGroupMember "Domain Admins" |
+  Where-Object {$_.SamAccountName -like "svc_*" -or $_.SamAccountName -like "*service*"}
+\`\`\`
+
+**4. AdminSDHolder & ACL Backdoors**
+\`\`\`powershell
+# Find objects with AdminCount=1 (protected by AdminSDHolder)
+Get-ADObject -Filter {AdminCount -eq 1} -Properties AdminCount |
+  Select-Object Name, ObjectClass, DistinguishedName
+
+# Check for unusual ACEs on the domain object (DCSync backdoor)
+$domain = (Get-ADDomain).DistinguishedName
+(Get-ACL "AD:\\$domain").Access |
+  Where-Object {$_.ActiveDirectoryRights -like "*Replication*"} |
+  Select-Object IdentityReference, ActiveDirectoryRights
+\`\`\``),
+
+      LAB('ps-lab2', 'Active Directory Security Audit Lab', 175,
+        `You are a security consultant engaged to perform a security assessment of CONTOSO.LOCAL. The CISO suspects the domain has been misconfigured and wants a PowerShell-driven audit report.
+
+Complete each task and explain the security impact of what you find:
+
+1. **Privileged Accounts:** Write a PowerShell command to list all members of Domain Admins, Enterprise Admins, and Schema Admins. How many members should each group ideally contain, and why is a service account in Domain Admins dangerous?
+
+2. **Password Never Expires:** Find all enabled accounts with PasswordNeverExpires=True. Explain how this configuration enables T1078 (Valid Account abuse) and what the remediation steps are.
+
+3. **Kerberoasting Attack Surface:** Identify all user accounts with Service Principal Names (SPNs) set. Explain the full Kerberoasting attack chain: SPN enumeration → TGS request → offline password cracking. Which mitigation blocks RC4 ticket encryption?
+
+4. **Stale Accounts:** Using LastLogonDate, find accounts not used in 90+ days that are still enabled. Why do attackers target stale accounts? What is the proper remediation procedure to avoid disrupting service accounts?
+
+5. **DCSync Backdoor Detection:** Describe which AD permissions enable a DCSync attack and how to detect them with PowerShell by querying domain object ACLs. What MITRE ATT&CK technique is DCSync (T___.___)?
+
+For each finding, write the exact PowerShell command and describe what a real attacker could do with access to that resource.`,
+        ['Get-ADGroupMember', 'Get-ADUser', 'PasswordNeverExpires', 'ServicePrincipalName', 'Kerberoasting', 'T1558.003', 'T1078', 'DCSync', 'Get-ACL', 'AdminSDHolder', 'LastLogonDate', 'SPN']),
+
+      L('ps-l4', 'Event Log Analysis & Threat Hunting', 140, `## Event Log Analysis with PowerShell
+
+Windows Event Logs are the primary source of truth for security investigations. PowerShell gives you surgical access to every event without a SIEM.
+
+### Critical Security Event IDs
+
+| Event ID | Log | Meaning |
+|----------|-----|---------|
+| 4624 | Security | Successful logon |
+| 4625 | Security | Failed logon |
+| 4648 | Security | Logon using explicit credentials |
+| 4672 | Security | Special privileges assigned |
+| 4688 | Security | Process created (command line) |
+| 4698 | Security | Scheduled task created |
+| 4720 | Security | User account created |
+| 4732 | Security | User added to security group |
+| 7045 | System | New service installed |
+| 1102 | Security | Audit log cleared (serious!) |
+
+### PowerShell Log Analysis Commands
+
+\`\`\`powershell
+# Failed logons in last 24 hours (brute force detection)
+Get-WinEvent -FilterHashtable @{
+  LogName = 'Security'
+  Id = 4625
+  StartTime = (Get-Date).AddHours(-24)
+} | Select-Object TimeCreated, @{N='User';E={$_.Properties[5].Value}},
+  @{N='IP';E={$_.Properties[19].Value}} | Group-Object User |
+  Sort-Object Count -Descending
+
+# Detect Pass-the-Hash / Lateral Movement (Event 4648)
+Get-WinEvent -FilterHashtable @{LogName='Security'; Id=4648} |
+  Select-Object TimeCreated, @{N='User';E={$_.Properties[1].Value}},
+  @{N='TargetHost';E={$_.Properties[8].Value}} | Where-Object {$_.TargetHost -ne 'localhost'}
+
+# Find PowerShell script block logging (4104) — catch obfuscated PS
+Get-WinEvent -LogName "Microsoft-Windows-PowerShell/Operational" -FilterHashtable @{Id=4104} |
+  Select-Object TimeCreated, @{N='Script';E={$_.Message}} | Select-Object -First 20
+
+# Process creation with command line (requires Audit Process Creation policy)
+Get-WinEvent -FilterHashtable @{LogName='Security'; Id=4688} |
+  Select-Object TimeCreated, @{N='Process';E={$_.Properties[5].Value}},
+  @{N='CommandLine';E={$_.Properties[8].Value}} |
+  Where-Object {$_.CommandLine -like "*-enc*" -or $_.CommandLine -like "*bypass*"}
+\`\`\`
+
+### Detecting Log Clearing (Critical Alert)
+
+\`\`\`powershell
+# Log cleared event — attacker covering tracks
+Get-WinEvent -FilterHashtable @{LogName='Security'; Id=1102} |
+  Select-Object TimeCreated, @{N='ClearedBy';E={$_.Properties[1].Value}}
+
+# System log cleared
+Get-WinEvent -FilterHashtable @{LogName='System'; Id=104} |
+  Select-Object TimeCreated
+\`\`\``),
+
+      L('ps-l5', 'PowerShell for Incident Response & DFIR', 150, `## PowerShell for Digital Forensics & Incident Response
+
+Speed matters in IR. PowerShell lets you collect volatile evidence in seconds before it's lost or overwritten.
+
+### Order of Volatility — Collect This First
+
+1. CPU registers & cache (milliseconds to lose)
+2. **Running processes** — capture immediately
+3. **Network connections** — close after isolation
+4. **Memory** — pagefile survives but RAM is volatile
+5. **Registry** — partially volatile (mounted hives)
+6. **Event logs** — semi-persistent
+7. Disk — persistent but may be overwritten
+
+### Evidence Collection Playbook
+
+\`\`\`powershell
+# === PHASE 1: VOLATILE DATA (first 60 seconds) ===
+
+# 1. Running processes (capture before any action)
+Get-Process | Select-Object Name, Id, Path, StartTime, Company |
+  Export-Csv "C:\\IR\\Evidence\\processes-$(Get-Date -Format yyyyMMdd-HHmm).csv" -NoTypeInformation
+
+# 2. Active network connections with process mapping
+Get-NetTCPConnection -State Established |
+  Select-Object LocalAddress, LocalPort, RemoteAddress, RemotePort, OwningProcess,
+  @{N='ProcessName';E={(Get-Process -Id $_.OwningProcess -EA SilentlyContinue).Name}} |
+  Export-Csv "C:\\IR\\Evidence\\network-connections.csv" -NoTypeInformation
+
+# 3. DNS cache (reveals C2 domains)
+Get-DnsClientCache | Select-Object Entry, Data, TimeToLive |
+  Export-Csv "C:\\IR\\Evidence\\dns-cache.csv" -NoTypeInformation
+
+# === PHASE 2: SEMI-VOLATILE DATA ===
+
+# 4. Event logs — copy raw .evtx files
+Copy-Item C:\\Windows\\System32\\winevt\\Logs\\Security.evtx "C:\\IR\\Evidence\\"
+Copy-Item C:\\Windows\\System32\\winevt\\Logs\\System.evtx "C:\\IR\\Evidence\\"
+
+# 5. PowerShell history
+$histPath = (Get-PSReadlineOption).HistorySavePath
+Copy-Item $histPath "C:\\IR\\Evidence\\ps-history.txt"
+
+# 6. Prefetch files (execution evidence)
+Copy-Item C:\\Windows\\Prefetch "C:\\IR\\Evidence\\Prefetch\\" -Recurse -ErrorAction SilentlyContinue
+
+# 7. Recent file access
+Get-ChildItem C:\\Users -Recurse -Filter "*.lnk" -ErrorAction SilentlyContinue |
+  Where-Object {$_.LastWriteTime -gt (Get-Date).AddDays(-7)} |
+  Select-Object FullName, LastWriteTime | Export-Csv "C:\\IR\\Evidence\\recent-lnk.csv" -NoTypeInformation
+\`\`\`
+
+### Threat Hunting Queries
+
+\`\`\`powershell
+# Find files modified in last 24h in sensitive locations
+Get-ChildItem C:\\Windows\\System32 -Recurse -ErrorAction SilentlyContinue |
+  Where-Object {$_.LastWriteTime -gt (Get-Date).AddHours(-24) -and !$_.PSIsContainer} |
+  Select-Object FullName, LastWriteTime, Length
+
+# Detect encoded PowerShell commands in event logs (obfuscation indicator)
+Get-WinEvent -FilterHashtable @{LogName='Security'; Id=4688} |
+  Where-Object {$_.Message -match "-[Ee][Nn][Cc]" -or $_.Message -match "FromBase64String"} |
+  Select-Object TimeCreated, @{N='CommandLine';E={$_.Properties[8].Value}}
+\`\`\``),
+
+      L('ps-l6', 'Defensive PowerShell: AMSI, Logging & Language Mode', 130, `## Defensive PowerShell Configuration
+
+Hardening PowerShell is one of the highest-ROI defensive controls. These settings detect and block most PowerShell-based attacks.
+
+### 1. ScriptBlock Logging (Event ID 4104)
+
+Logs the FULL content of every script block executed — even obfuscated or in-memory scripts.
+
+\`\`\`powershell
+# Enable ScriptBlock Logging via registry
+$key = "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\PowerShell\\ScriptBlockLogging"
+New-Item -Path $key -Force
+Set-ItemProperty -Path $key -Name EnableScriptBlockLogging -Value 1
+
+# Optional: Log suspicious script blocks only (reduce noise)
+Set-ItemProperty -Path $key -Name EnableScriptBlockInvocationLogging -Value 1
+\`\`\`
+
+**Or via Group Policy:** Computer Configuration → Admin Templates → Windows Components → Windows PowerShell → Turn On PowerShell Script Block Logging
+
+### 2. Module Logging (Event ID 4103)
+
+Logs every module imported and function called.
+
+\`\`\`powershell
+$key = "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\PowerShell\\ModuleLogging"
+New-Item -Path $key -Force
+Set-ItemProperty -Path $key -Name EnableModuleLogging -Value 1
+# Specify which modules (or * for all)
+New-ItemProperty -Path "$key\\ModuleNames" -Name "*" -Value "*" -PropertyType String -Force
+\`\`\`
+
+### 3. AMSI (Antimalware Scan Interface)
+
+AMSI hooks into PowerShell, WMI, and VBScript to scan content before execution. All modern AV products use AMSI.
+
+\`\`\`powershell
+# Test if AMSI is active (will be blocked by AV if EICAR detected)
+[System.Management.Automation.AmsiUtils]::ScanContent("AMSI Test Sample", "PSSession")
+
+# Check AMSI providers registered on this system
+Get-ChildItem "HKLM:\\SOFTWARE\\Microsoft\\AMSI\\Providers"
+\`\`\`
+
+### 4. Constrained Language Mode (CLM)
+
+Blocks advanced language features attackers rely on (Add-Type, .NET reflection, COM objects).
+
+\`\`\`powershell
+# Check current language mode
+$ExecutionContext.SessionState.LanguageMode
+# Full: FullLanguage (default)
+# Locked: ConstrainedLanguage (hardened)
+
+# Force CLM via AppLocker or WDAC policy
+# Device Guard / Windows Defender Application Control enforces CLM automatically
+\`\`\`
+
+### 5. Just Enough Administration (JEA)
+
+Limits remote PowerShell sessions to only the cmdlets users need.
+
+\`\`\`powershell
+# See all JEA endpoints on this system
+Get-PSSessionConfiguration | Select-Object Name, Enabled, Permission
+
+# Create a JEA role capability (restrict to only allowed cmdlets)
+New-PSRoleCapabilityFile -Path "C:\\JEA\\SecurityAudit.psrc" -VisibleCmdlets "Get-Process","Get-EventLog","Get-NetTCPConnection"
+\`\`\``),
+
+      SIM('ps-sim1', 'Live PowerShell Incident Investigation', 200,
+        'Active incident: SOC has detected a suspicious PowerShell process on WIN-WKS09. Logs show multiple encoded commands (base64) executed, followed by an outbound connection to 185.220.101.47 on port 4444. The user (sarah.jones) is now offline. You have WinRM access to the compromised host. Using PowerShell, collect volatile evidence, identify the attack chain, determine persistence mechanisms, assess lateral movement, and provide containment recommendations. The AI will play the role of the Windows system, responding to your PowerShell commands with realistic output.'),
     ],
   },
 ];

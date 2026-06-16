@@ -5,14 +5,16 @@ import { Header } from '@/components/layout/header';
 import { TrainingSimulator } from '@/components/training/training-simulator';
 import { LabSimulator } from '@/components/training/lab-simulator';
 import { InterviewSimulator } from '@/components/training/interview-simulator';
-import { Target, FlaskConical, Briefcase } from 'lucide-react';
+import { PowerShellTerminal } from '@/components/training/powershell-terminal';
+import { Target, FlaskConical, Briefcase, Terminal } from 'lucide-react';
 
 const MONO = { fontFamily: 'var(--font-fira-code), monospace' } as const;
 
 const TABS = [
-  { id: 'scenarios',  label: 'Scenarios', icon: Target,      desc: 'Interactive attack simulations — AI plays the attacker, you respond' },
-  { id: 'lab',        label: 'Lab',       icon: FlaskConical, desc: 'Hands-on labs — AI instructor guides you step by step through real-world exercises' },
-  { id: 'interview',  label: 'Interview', icon: Briefcase,    desc: 'AI mock interviews — prepare for your next cybersecurity job with realistic practice and coaching' },
+  { id: 'scenarios',  label: 'Scenarios',  icon: Target,       desc: 'Interactive attack simulations — AI plays the attacker, you respond' },
+  { id: 'lab',        label: 'Lab',        icon: FlaskConical,  desc: 'Hands-on labs — AI instructor guides you step by step through real-world exercises' },
+  { id: 'interview',  label: 'Interview',  icon: Briefcase,     desc: 'AI mock interviews — prepare for your next cybersecurity job with realistic practice and coaching' },
+  { id: 'powershell', label: 'PowerShell', icon: Terminal,      desc: 'Virtual PowerShell terminal — learn security-focused PS commands in an AI-simulated Windows environment' },
 ] as const;
 
 type TabId = typeof TABS[number]['id'];
@@ -53,8 +55,8 @@ export default function TrainingPage() {
               >
                 <Icon size={13} />
                 {t.label}
-                {t.id === 'interview' && (
-                  <span style={{ ...MONO, fontSize: 8, color: '#a78bfa', background: 'rgba(167,139,250,0.12)', border: '1px solid rgba(167,139,250,0.3)', borderRadius: 3, padding: '1px 5px', fontWeight: 700 }}>
+                {(t.id === 'interview' || t.id === 'powershell') && (
+                  <span style={{ ...MONO, fontSize: 8, color: t.id === 'powershell' ? '#60a5fa' : '#a78bfa', background: t.id === 'powershell' ? 'rgba(96,165,250,0.12)' : 'rgba(167,139,250,0.12)', border: `1px solid ${t.id === 'powershell' ? 'rgba(96,165,250,0.3)' : 'rgba(167,139,250,0.3)'}`, borderRadius: 3, padding: '1px 5px', fontWeight: 700 }}>
                     NEW
                   </span>
                 )}
@@ -67,6 +69,7 @@ export default function TrainingPage() {
         {activeTab === 'scenarios'  && <TrainingSimulator />}
         {activeTab === 'lab'        && <LabSimulator />}
         {activeTab === 'interview'  && <InterviewSimulator />}
+        {activeTab === 'powershell' && <PowerShellTerminal />}
       </div>
     </div>
   );
