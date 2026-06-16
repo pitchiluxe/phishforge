@@ -4,13 +4,15 @@ import { useState } from 'react';
 import { Header } from '@/components/layout/header';
 import { TrainingSimulator } from '@/components/training/training-simulator';
 import { LabSimulator } from '@/components/training/lab-simulator';
-import { Target, FlaskConical } from 'lucide-react';
+import { InterviewSimulator } from '@/components/training/interview-simulator';
+import { Target, FlaskConical, Briefcase } from 'lucide-react';
 
 const MONO = { fontFamily: 'var(--font-fira-code), monospace' } as const;
 
 const TABS = [
-  { id: 'scenarios', label: 'Scenarios', icon: Target, desc: 'Interactive attack simulations — AI plays the attacker, you respond' },
-  { id: 'lab', label: 'Lab', icon: FlaskConical, desc: 'Hands-on labs — AI instructor guides you step by step through real-world exercises' },
+  { id: 'scenarios',  label: 'Scenarios', icon: Target,      desc: 'Interactive attack simulations — AI plays the attacker, you respond' },
+  { id: 'lab',        label: 'Lab',       icon: FlaskConical, desc: 'Hands-on labs — AI instructor guides you step by step through real-world exercises' },
+  { id: 'interview',  label: 'Interview', icon: Briefcase,    desc: 'AI mock interviews — prepare for your next cybersecurity job with realistic practice and coaching' },
 ] as const;
 
 type TabId = typeof TABS[number]['id'];
@@ -51,8 +53,8 @@ export default function TrainingPage() {
               >
                 <Icon size={13} />
                 {t.label}
-                {t.id === 'lab' && (
-                  <span style={{ ...MONO, fontSize: 8, color: '#00ff41', background: 'rgba(0,255,65,0.12)', border: '1px solid rgba(0,255,65,0.3)', borderRadius: 3, padding: '1px 5px', fontWeight: 700 }}>
+                {t.id === 'interview' && (
+                  <span style={{ ...MONO, fontSize: 8, color: '#a78bfa', background: 'rgba(167,139,250,0.12)', border: '1px solid rgba(167,139,250,0.3)', borderRadius: 3, padding: '1px 5px', fontWeight: 700 }}>
                     NEW
                   </span>
                 )}
@@ -62,8 +64,9 @@ export default function TrainingPage() {
         </div>
 
         {/* Tab content */}
-        {activeTab === 'scenarios' && <TrainingSimulator />}
-        {activeTab === 'lab' && <LabSimulator />}
+        {activeTab === 'scenarios'  && <TrainingSimulator />}
+        {activeTab === 'lab'        && <LabSimulator />}
+        {activeTab === 'interview'  && <InterviewSimulator />}
       </div>
     </div>
   );

@@ -1,58 +1,75 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Trophy, Medal, Award, Shield, Zap, Target } from 'lucide-react';
-import { getTotalXP, getCompletedModuleCount, getLevelForXP, type ClassroomProgress } from '@/lib/classroom';
+import { Shield, Zap, BookOpen, Terminal, Briefcase, Star, Award, TrendingUp, Clock } from 'lucide-react';
+import { getTotalXP, getCompletedModuleCount, getLevelForXP, getXPProgress, type ClassroomProgress } from '@/lib/classroom';
 
 const MONO = { fontFamily: 'var(--font-fira-code), monospace' } as const;
 
-interface LeaderboardEntry {
-  rank: number;
-  name: string;
-  level: number;
-  levelTitle: string;
-  xp: number;
-  badges: number;
-  completedModules: number;
-  avgScore: number;
-  isCurrentUser?: boolean;
+interface ActivityItem {
+  type: 'module' | 'lab' | 'training' | 'interview';
+  title: string;
+  score?: number;
+  verdict?: string;
+  completedAt: string;
 }
 
-const DEMO_ENTRIES: Omit<LeaderboardEntry, 'rank'>[] = [
-  { name: 'Sarah Chen',          level: 7, levelTitle: 'Cyber Guardian',   xp: 14820, badges: 23, completedModules: 47, avgScore: 97 },
-  { name: 'Marcus Rodriguez',    level: 6, levelTitle: 'Security Lead',    xp: 10340, badges: 18, completedModules: 39, avgScore: 94 },
-  { name: 'Priya Patel',         level: 6, levelTitle: 'Security Lead',    xp: 9870,  badges: 17, completedModules: 37, avgScore: 92 },
-  { name: 'Alex Kim',            level: 5, levelTitle: 'SOC Analyst',      xp: 7230,  badges: 14, completedModules: 31, avgScore: 88 },
-  { name: 'Jordan Taylor',       level: 5, levelTitle: 'SOC Analyst',      xp: 6890,  badges: 12, completedModules: 28, avgScore: 85 },
-  { name: 'Morgan Liu',          level: 4, levelTitle: 'Threat Hunter',    xp: 4210,  badges: 9,  completedModules: 22, avgScore: 81 },
-  { name: 'Casey Williams',      level: 4, levelTitle: 'Threat Hunter',    xp: 3980,  badges: 8,  completedModules: 20, avgScore: 79 },
-  { name: 'Riley Johnson',       level: 3, levelTitle: 'Security Analyst', xp: 2750,  badges: 6,  completedModules: 15, avgScore: 76 },
-  { name: 'Sam Torres',          level: 3, levelTitle: 'Security Analyst', xp: 2190,  badges: 5,  completedModules: 13, avgScore: 72 },
-  { name: 'Jamie Reeves',        level: 2, levelTitle: 'Trainee',          xp: 890,   badges: 3,  completedModules: 7,  avgScore: 68 },
-];
+interface Stats {
+  xp: number;
+  modules: number;
+  labs: number;
+  trainingSessions: number;
+  interviews: number;
+  badges: number;
+  avgScore: number;
+  classroomXP: number;
+  recentActivity: ActivityItem[];
+  badgeList: string[];
+}
 
-const RANK_STYLE: Record<number, { color: string; icon: React.ElementType }> = {
-  1: { color: '#facc15', icon: Trophy },
-  2: { color: '#94a3b8', icon: Medal },
-  3: { color: '#fb923c', icon: Award },
+function timeAgo(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const min = Math.floor(diff / 60000);
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  const day = Math.floor(hr / 24);
+  return `${day}d ago`;
+}
+
+function StatCard({ label, value, icon: Icon, color }: { label: string; value: string | number; icon: React.ElementType; color: string }) {
+  return (
+    <div style={{ padding: '18px 16px', background: 'rgba(0,255,65,0.02)', border: '1px solid rgba(0,255,65,0.1)', borderRadius: 10, textAlign: 'center' }}>
+      <Icon size={16} style={{ color, marginBottom: 10, opacity: 0.8 }} />
+      <div style={{ ...MONO, fontSize: 22, fontWeight: 700, color }}>{value}</div>
+      <div style={{ ...MONO, fontSize: 9, color: '#00ff41', opacity: 0.35, textTransform: 'uppercase', letterSpacing: '0.08em', marginTop: 4 }}>{label}</div>
+    </div>
+  );
+}
+
+const ACTIVITY_ICONS: Record<string, React.ElementType> = {
+  module: BookOpen,
+  lab: Terminal,
+  training: Shield,
+  interview: Briefcase,
+};
+
+const ACTIVITY_COLOR: Record<string, string> = {
+  module: '#00ff41',
+  lab: '#60a5fa',
+  training: '#fb923c',
+  interview: '#a78bfa',
 };
 
 export function LeaderboardView() {
-  const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
-  const [filter, setFilter] = useState<'all' | 'xp' | 'modules' | 'score'>('all');
+  const [stats, setStats] = useState<Stats | null>(null);
 
   useEffect(() => {
-    // Build current user entry from localStorage progress
-    let userXP = 0;
-    let userModules = 0;
-    let userBadges = 0;
-    let userAvgScore = 0;
-
     try {
       const progress: ClassroomProgress = JSON.parse(localStorage.getItem('pf_classroom_progress') ?? '{}');
-      userXP = getTotalXP(progress);
-      userModules = getCompletedModuleCount(progress);
-      userBadges = JSON.parse(localStorage.getItem('pf_classroom_badges') ?? '[]').length;
+      const xp = getTotalXP(progress);
+      const modules = getCompletedModuleCount(progress);
+      const badgeList: string[] = JSON.parse(localStorage.getItem('pf_classroom_badges') ?? '[]');
 
       const scores: number[] = [];
       for (const course of Object.values(progress)) {
@@ -60,161 +77,187 @@ export function LeaderboardView() {
           if (mod.score !== undefined) scores.push(mod.score);
         }
       }
-      userAvgScore = scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0;
+
+      const labSessions: { id: string; labId: string; labTitle: string; completedAt: string }[] =
+        JSON.parse(localStorage.getItem('pf_lab_sessions') ?? '[]');
+
+      const trainingSessions: { id: string; scenarioId: string; scenarioTitle: string; score: number; verdict: string; completedAt: string }[] =
+        JSON.parse(localStorage.getItem('pf_training_sessions') ?? '[]');
+
+      const ivSessions: { id: string; role: string; interviewType: string; scores: { knowledge: number; communication: number; problemSolving: number }; verdict: string; completedAt: string }[] =
+        JSON.parse(localStorage.getItem('pf_interview_sessions') ?? '[]');
+
+      trainingSessions.forEach(s => { if (s.score !== undefined) scores.push(s.score); });
+      ivSessions.forEach(s => {
+        const avg = Math.round((s.scores.knowledge + s.scores.communication + s.scores.problemSolving) / 3) * 10;
+        scores.push(avg);
+      });
+
+      const avgScore = scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0;
+
+      const activity: ActivityItem[] = [];
+
+      for (const [, course] of Object.entries(progress)) {
+        for (const [, mod] of Object.entries(course)) {
+          if (mod.completed && mod.completedAt) {
+            activity.push({ type: 'module', title: 'Completed classroom module', score: mod.score, completedAt: mod.completedAt });
+          }
+        }
+      }
+
+      labSessions.forEach(s => activity.push({ type: 'lab', title: s.labTitle, completedAt: s.completedAt }));
+      trainingSessions.forEach(s => activity.push({ type: 'training', title: s.scenarioTitle, score: s.score, verdict: s.verdict, completedAt: s.completedAt }));
+      ivSessions.forEach(s => activity.push({ type: 'interview', title: `${s.role} Interview`, verdict: s.verdict, completedAt: s.completedAt }));
+
+      activity.sort((a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime());
+
+      setStats({
+        xp,
+        modules,
+        labs: labSessions.length,
+        trainingSessions: trainingSessions.length,
+        interviews: ivSessions.length,
+        badges: badgeList.length,
+        avgScore,
+        classroomXP: xp,
+        recentActivity: activity.slice(0, 15),
+        badgeList,
+      });
     } catch {}
-
-    const userLevel = getLevelForXP(userXP);
-    const userEntry: Omit<LeaderboardEntry, 'rank'> = {
-      name: 'You',
-      level: userLevel.level,
-      levelTitle: userLevel.title,
-      xp: userXP,
-      badges: userBadges,
-      completedModules: userModules,
-      avgScore: userAvgScore,
-      isCurrentUser: true,
-    };
-
-    const allEntries = [...DEMO_ENTRIES, userEntry]
-      .sort((a, b) => b.xp - a.xp)
-      .map((e, i) => ({ ...e, rank: i + 1 }));
-
-    setEntries(allEntries);
   }, []);
 
-  const sorted = [...entries].sort((a, b) => {
-    if (filter === 'xp') return b.xp - a.xp;
-    if (filter === 'modules') return b.completedModules - a.completedModules;
-    if (filter === 'score') return b.avgScore - a.avgScore;
-    return a.rank - b.rank;
-  });
+  if (!stats) return null;
+
+  const level = getLevelForXP(stats.xp);
+  const xpProg = getXPProgress(stats.xp);
+  const hasActivity = stats.modules > 0 || stats.labs > 0 || stats.trainingSessions > 0 || stats.interviews > 0;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      {/* Top 3 podium */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
-        {sorted.slice(0, 3).map((entry) => {
-          const rs = RANK_STYLE[entry.rank];
-          const Icon = rs?.icon ?? Award;
-          return (
-            <div
-              key={entry.rank}
-              style={{
-                padding: entry.rank === 1 ? '24px 20px' : '18px 20px',
-                background: `${rs?.color ?? '#00ff41'}08`,
-                border: `1px solid ${rs?.color ?? '#00ff41'}25`,
-                borderRadius: 10, textAlign: 'center',
-                boxShadow: entry.rank === 1 ? `0 0 20px ${rs?.color}20` : 'none',
-                transition: 'all 200ms',
-              }}
-            >
-              <Icon size={entry.rank === 1 ? 26 : 20} style={{ color: rs?.color, marginBottom: 10 }} />
-              <div style={{ ...MONO, fontSize: entry.rank === 1 ? 14 : 12, fontWeight: 700, color: '#c8ffd4', marginBottom: 4 }}>{entry.name}</div>
-              <div style={{ ...MONO, fontSize: 9, color: rs?.color, opacity: 0.7, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>{entry.levelTitle}</div>
-              <div style={{ ...MONO, fontSize: 16, fontWeight: 700, color: rs?.color }}>{entry.xp.toLocaleString()}</div>
-              <div style={{ ...MONO, fontSize: 9, color: '#00ff41', opacity: 0.35, textTransform: 'uppercase' }}>XP</div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+      {/* Level / XP card */}
+      <div style={{
+        padding: '24px 28px', background: 'rgba(0,255,65,0.03)',
+        border: `1px solid ${level.color}30`, borderRadius: 12,
+        boxShadow: `0 0 24px ${level.color}10`,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+              <div style={{
+                width: 52, height: 52, borderRadius: '50%',
+                background: `${level.color}12`, border: `2px solid ${level.color}`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                boxShadow: `0 0 16px ${level.color}40`,
+              }}>
+                <span style={{ ...MONO, fontSize: 20, fontWeight: 700, color: level.color }}>{level.level}</span>
+              </div>
+              <div>
+                <div style={{ ...MONO, fontSize: 18, fontWeight: 700, color: level.color }}>{level.title}</div>
+                <div style={{ ...MONO, fontSize: 11, color: '#00ff41', opacity: 0.4, marginTop: 2 }}>Level {level.level} · {stats.xp.toLocaleString()} XP total</div>
+              </div>
             </div>
-          );
-        })}
+            {/* XP progress bar */}
+            <div style={{ marginTop: 4 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                <span style={{ ...MONO, fontSize: 9, color: '#00ff41', opacity: 0.35 }}>{xpProg.current.toLocaleString()} / {(xpProg.max - xpProg.min).toLocaleString()} XP to next level</span>
+                <span style={{ ...MONO, fontSize: 9, color: level.color }}>{xpProg.pct}%</span>
+              </div>
+              <div style={{ height: 6, background: 'rgba(0,255,65,0.08)', borderRadius: 3, width: 300, maxWidth: '100%' }}>
+                <div style={{ height: '100%', width: `${xpProg.pct}%`, background: level.color, borderRadius: 3, boxShadow: `0 0 8px ${level.color}60`, transition: 'width 600ms ease' }} />
+              </div>
+            </div>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ ...MONO, fontSize: 9, color: '#00ff41', opacity: 0.35, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>Your Record</div>
+            <div style={{ ...MONO, fontSize: 11, color: '#c8ffd4' }}>
+              {hasActivity ? `${stats.recentActivity.length} activities logged` : 'No activity yet'}
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* Filter tabs */}
-      <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid rgba(0,255,65,0.1)' }}>
-        {([['all', 'All'], ['xp', 'By XP'], ['modules', 'By Modules'], ['score', 'By Score']] as const).map(([val, label]) => (
-          <button
-            key={val}
-            onClick={() => setFilter(val)}
-            style={{
-              ...MONO, fontSize: 10, padding: '7px 14px', background: 'none', border: 'none',
-              cursor: 'pointer', color: '#00ff41', opacity: filter === val ? 1 : 0.4,
-              borderBottom: `2px solid ${filter === val ? '#00ff41' : 'transparent'}`,
-              textTransform: 'uppercase', letterSpacing: '0.08em', transition: 'all 150ms', marginBottom: -1,
-            }}
-          >
-            {label}
-          </button>
-        ))}
+      {/* Stats grid */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 12 }}>
+        <StatCard label="Modules"   value={stats.modules}          icon={BookOpen}  color="#00ff41" />
+        <StatCard label="Labs"      value={stats.labs}             icon={Terminal}  color="#60a5fa" />
+        <StatCard label="Training"  value={stats.trainingSessions} icon={Shield}    color="#fb923c" />
+        <StatCard label="Interviews" value={stats.interviews}      icon={Briefcase} color="#a78bfa" />
+        <StatCard label="Avg Score" value={stats.avgScore > 0 ? `${stats.avgScore}%` : '—'} icon={TrendingUp} color="#facc15" />
+        <StatCard label="Badges"    value={stats.badges}           icon={Award}     color="#f87171" />
       </div>
 
-      {/* Full leaderboard table */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {/* Header row */}
-        <div style={{ display: 'grid', gridTemplateColumns: '40px 1fr 80px 80px 80px 80px', gap: 12, padding: '8px 16px' }}>
-          {['#', 'Name', 'XP', 'Modules', 'Badges', 'Avg Score'].map((h) => (
-            <div key={h} style={{ ...MONO, fontSize: 9, color: '#00ff41', opacity: 0.35, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{h}</div>
-          ))}
+      {/* Badges earned */}
+      {stats.badgeList.length > 0 && (
+        <div style={{ padding: '16px 20px', background: 'rgba(248,113,113,0.03)', border: '1px solid rgba(248,113,113,0.12)', borderRadius: 10 }}>
+          <div style={{ ...MONO, fontSize: 9, color: '#f87171', opacity: 0.5, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 12 }}>
+            <Award size={11} style={{ display: 'inline', marginRight: 5 }} />Badges Earned ({stats.badges})
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {stats.badgeList.map(b => (
+              <span key={b} style={{ ...MONO, fontSize: 10, color: '#f87171', background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)', borderRadius: 4, padding: '4px 10px' }}>
+                <Star size={9} style={{ display: 'inline', marginRight: 4 }} />{b}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Recent activity */}
+      <div>
+        <div style={{ ...MONO, fontSize: 9, color: '#00ff41', opacity: 0.35, textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 14 }}>
+          <Clock size={10} style={{ display: 'inline', marginRight: 5 }} />// Recent Activity
         </div>
 
-        {sorted.map((entry) => {
-          const rs = RANK_STYLE[entry.rank];
-          const isUser = entry.isCurrentUser;
-          const scoreColor = entry.avgScore >= 80 ? '#00ff41' : entry.avgScore >= 60 ? '#facc15' : '#f87171';
-          return (
-            <div
-              key={entry.rank}
-              style={{
-                display: 'grid', gridTemplateColumns: '40px 1fr 80px 80px 80px 80px', gap: 12,
-                padding: '12px 16px', borderRadius: 8,
-                background: isUser ? 'rgba(0,255,65,0.06)' : rs ? `${rs.color}06` : 'rgba(0,255,65,0.015)',
-                border: isUser ? '1px solid rgba(0,255,65,0.3)' : `1px solid ${rs ? rs.color + '18' : 'rgba(0,255,65,0.07)'}`,
-                transition: 'all 150ms',
-              }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = isUser ? 'rgba(0,255,65,0.09)' : 'rgba(0,255,65,0.04)'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = isUser ? 'rgba(0,255,65,0.06)' : rs ? `${rs.color}06` : 'rgba(0,255,65,0.015)'; }}
-            >
-              {/* Rank */}
-              <div style={{ display: 'flex', alignItems: 'center' }}>
-                {rs ? (
-                  <span style={{ ...MONO, fontSize: 12, fontWeight: 700, color: rs.color }}>{entry.rank}</span>
-                ) : (
-                  <span style={{ ...MONO, fontSize: 11, color: '#00ff41', opacity: 0.5 }}>{entry.rank}</span>
-                )}
-              </div>
-
-              {/* Name + level */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-                <div style={{ width: 30, height: 30, borderRadius: '50%', background: isUser ? 'rgba(0,255,65,0.15)' : 'rgba(0,255,65,0.06)', border: '1px solid rgba(0,255,65,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  <span style={{ ...MONO, fontSize: 10, fontWeight: 700, color: '#00ff41' }}>{entry.level}</span>
-                </div>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ ...MONO, fontSize: 12, fontWeight: isUser ? 700 : 500, color: isUser ? '#00ff41' : '#c8ffd4', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {entry.name} {isUser && <span style={{ fontSize: 9, opacity: 0.5 }}>(you)</span>}
+        {!hasActivity ? (
+          <div style={{ padding: '40px 20px', textAlign: 'center', background: 'rgba(0,255,65,0.02)', border: '1px solid rgba(0,255,65,0.08)', borderRadius: 10 }}>
+            <Zap size={32} style={{ color: '#00ff41', opacity: 0.2, marginBottom: 14 }} />
+            <div style={{ ...MONO, fontSize: 13, color: '#00ff41', opacity: 0.4, marginBottom: 8 }}>No activity recorded yet</div>
+            <div style={{ ...MONO, fontSize: 11, color: '#00ff41', opacity: 0.25 }}>Complete classroom modules, labs, training scenarios, or interviews to build your record</div>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {stats.recentActivity.map((item, i) => {
+              const Icon = ACTIVITY_ICONS[item.type];
+              const color = ACTIVITY_COLOR[item.type];
+              const scoreColor = item.score !== undefined
+                ? (item.score >= 80 ? '#00ff41' : item.score >= 60 ? '#facc15' : '#f87171')
+                : color;
+              return (
+                <div
+                  key={i}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 14, padding: '12px 16px',
+                    background: 'rgba(0,255,65,0.015)', border: '1px solid rgba(0,255,65,0.07)',
+                    borderRadius: 8, transition: 'all 150ms',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.background = 'rgba(0,255,65,0.04)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'rgba(0,255,65,0.015)'; }}
+                >
+                  <div style={{ width: 28, height: 28, borderRadius: 6, background: `${color}10`, border: `1px solid ${color}25`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <Icon size={13} style={{ color }} />
                   </div>
-                  <div style={{ ...MONO, fontSize: 9, color: '#00ff41', opacity: 0.35, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{entry.levelTitle}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ ...MONO, fontSize: 11, color: '#c8ffd4', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.title}</div>
+                    <div style={{ ...MONO, fontSize: 9, color, opacity: 0.45, textTransform: 'uppercase', letterSpacing: '0.06em', marginTop: 2 }}>{item.type}</div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
+                    {item.score !== undefined && (
+                      <span style={{ ...MONO, fontSize: 11, fontWeight: 700, color: scoreColor }}>{item.score}%</span>
+                    )}
+                    {item.verdict && !item.score && (
+                      <span style={{ ...MONO, fontSize: 10, color, opacity: 0.7 }}>{item.verdict}</span>
+                    )}
+                    <span style={{ ...MONO, fontSize: 9, color: '#00ff41', opacity: 0.25 }}>{timeAgo(item.completedAt)}</span>
+                  </div>
                 </div>
-              </div>
-
-              {/* XP */}
-              <div style={{ display: 'flex', alignItems: 'center' }}>
-                <span style={{ ...MONO, fontSize: 11, fontWeight: 700, color: '#00ff41' }}>{entry.xp.toLocaleString()}</span>
-              </div>
-
-              {/* Modules */}
-              <div style={{ display: 'flex', alignItems: 'center' }}>
-                <span style={{ ...MONO, fontSize: 11, color: '#00ff41', opacity: 0.7 }}>{entry.completedModules}</span>
-              </div>
-
-              {/* Badges */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                <Shield size={10} style={{ color: '#00ff41', opacity: 0.4 }} />
-                <span style={{ ...MONO, fontSize: 11, color: '#00ff41', opacity: 0.7 }}>{entry.badges}</span>
-              </div>
-
-              {/* Avg score */}
-              <div style={{ display: 'flex', alignItems: 'center' }}>
-                {entry.avgScore > 0 ? (
-                  <span style={{ ...MONO, fontSize: 11, fontWeight: 600, color: scoreColor }}>{entry.avgScore}%</span>
-                ) : (
-                  <span style={{ ...MONO, fontSize: 11, color: '#00ff41', opacity: 0.2 }}>—</span>
-                )}
-              </div>
-            </div>
-          );
-        })}
+              );
+            })}
+          </div>
+        )}
       </div>
 
-      <div style={{ ...MONO, fontSize: 10, color: '#00ff41', opacity: 0.3, textAlign: 'center', padding: '8px 0', borderTop: '1px solid rgba(0,255,65,0.07)' }}>
-        // Leaderboard updates as you complete modules and training sessions
+      <div style={{ ...MONO, fontSize: 10, color: '#00ff41', opacity: 0.2, textAlign: 'center', padding: '8px 0', borderTop: '1px solid rgba(0,255,65,0.07)' }}>
+        // Stats update in real time as you complete modules, labs, training sessions, and interviews
       </div>
     </div>
   );
