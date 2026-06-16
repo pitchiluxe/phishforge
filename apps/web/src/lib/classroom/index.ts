@@ -1258,7 +1258,7 @@ export function getCompletedModuleCount(progress: ClassroomProgress): number {
 }
 
 export function getCourseProgress(courseId: string, progress: ClassroomProgress): number {
-  const course = COURSES.find((c) => c.id === courseId);
+  const course = [...COURSES, ...EXTRA_COURSES].find((c) => c.id === courseId);
   if (!course) return 0;
   const courseProgress = progress[courseId] ?? {};
   const completed = course.modules.filter((m) => courseProgress[m.id]?.completed).length;
