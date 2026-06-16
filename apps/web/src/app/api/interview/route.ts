@@ -28,12 +28,14 @@ Tone: Professional, encouraging, never dismissive. Treat every candidate with re
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { role, interviewType, messages = [], mode } = body;
+  const { role, interviewType, messages = [], mode, seedQuestion } = body;
 
   const initMsg = messages.length === 0
     ? {
         role: 'user' as const,
-        content: `Begin the interview. Role: ${role}. Interview type: ${interviewType}. Briefly introduce yourself (1-2 sentences), explain the format (6 questions, mix based on type), then ask question 1 of 6.`,
+        content: seedQuestion
+          ? `Begin the ${interviewType} interview for a ${role} role. Skip introductions — go straight to asking this specific question as Question 1 of 6: "${seedQuestion}". After the candidate's answer, continue with 5 more follow-up or related questions.`
+          : `Begin the interview. Role: ${role}. Interview type: ${interviewType}. Briefly introduce yourself (1-2 sentences), explain the format (6 questions, mix based on type), then ask question 1 of 6.`,
       }
     : null;
 
