@@ -844,6 +844,133 @@ export const STANDALONE_LABS: StandaloneLab[] = [
     keywords: ['security architecture', 'threat modeling', 'JWT localStorage', 'AWS WAF', 'RDS private subnet', 'micro-segmentation', 'STRIDE', 'security requirements'],
     framework: 'TOGAF Security Architecture',
   },
+
+  // ── CROWDSTRIKE / FALCON SENSOR / EDR ─────────────────────────────────────
+
+  {
+    id: 'lab-cs-falcon-tamper',
+    title: 'CrowdStrike Falcon Sensor Tamper Detection',
+    description: 'Identify and respond to attempts to disable or bypass CrowdStrike Falcon Sensor on Windows endpoints.',
+    category: 'EDR & Endpoint Security',
+    difficulty: 'advanced',
+    estimatedMin: 40,
+    xpReward: 220,
+    accentColor: '#f87171',
+    scenario: 'During a post-incident review you discover that the Falcon Sensor service (CSFalconService) was stopped on 14 endpoints 45 minutes before a ransomware payload detonated. Falcon event logs show WMI-based process termination chains and tamper-protection bypass attempts using the sensor\'s maintenance token API. You must determine the full attack chain and harden against repeat attempts.',
+    tasks: [
+      'Identify which Windows Event IDs and Falcon event types indicate sensor tamper attempts',
+      'Explain how WMI permanent event subscriptions are used to kill the CSFalconService without triggering tamper-protection',
+      'Describe how to use the Falcon maintenance token correctly and risks of token leakage',
+      'Write a detection rule (SPL or KQL) to alert when CSFalconService is stopped outside a maintenance window',
+      'Design a hardening checklist to prevent EDR sensor tampering on Windows endpoints',
+    ],
+    labPrompt: `You are the lead IR analyst responding to a Falcon tamper incident. CSFalconService was killed on 14 machines via WMI event subscriptions 45 minutes before ransomware detonated.
+
+Analyze the attack chain: (1) Explain the WMI permanent event subscription technique (T1546.003) used to monitor for sensor restart and chain a kill command, (2) identify the Falcon events and Windows Event IDs (7045, 7036, 4688) that should have alerted, (3) describe how Falcon's tamper protection works and why it was bypassed here, (4) write a Splunk SPL query to detect CSFalconService stops outside approved maintenance windows, (5) define a hardening policy including sensor tamper-protection settings, SIEM forwarding of Falcon audit logs, and approval workflows for maintenance tokens.`,
+    keywords: ['CrowdStrike', 'Falcon', 'tamper protection', 'CSFalconService', 'WMI event subscription', 'EDR bypass', 'T1546.003', 'T1562.001', 'maintenance token', 'Windows Event 7036'],
+    tools: ['CrowdStrike Falcon Console', 'Splunk', 'Windows Event Viewer', 'WMI Explorer'],
+    framework: 'MITRE ATT&CK T1562.001',
+  },
+
+  {
+    id: 'lab-cs-byovd',
+    title: 'BYOVD Attack Simulation & Falcon Defense',
+    description: 'Understand Bring-Your-Own-Vulnerable-Driver attacks and how CrowdStrike Falcon detects and blocks them.',
+    category: 'EDR & Endpoint Security',
+    difficulty: 'advanced',
+    estimatedMin: 50,
+    xpReward: 260,
+    accentColor: '#f87171',
+    scenario: 'A threat intelligence report reveals that a ransomware group is loading RTCore64.sys (a vulnerable Micro-Star driver) to achieve kernel-level write primitives, then patching Falcon\'s kernel callbacks to blind the sensor before deploying encryption. Your job is to assess your Falcon deployment\'s resistance to BYOVD and design countermeasures.',
+    tasks: [
+      'Explain how BYOVD (T1068) achieves ring-0 access and why signed-driver blocklists are critical',
+      'List the Falcon configuration settings that prevent vulnerable driver loading (ASM, kernel sensor, blocklist)',
+      'Describe how Falcon\'s kernel sensor detects callback patching and memory tampering',
+      'Write the CrowdStrike Falcon prevention policy settings that should be enabled to block BYOVD',
+      'Design a detection-in-depth strategy combining Falcon, Sysmon, and SIEM alerting for kernel driver abuse',
+    ],
+    labPrompt: `A ransomware affiliate is using RTCore64.sys (CVE-2019-16098) for BYOVD: loading the driver as a signed legitimate binary, exploiting its IOCTL interface for arbitrary kernel memory write, patching Falcon's driver object notify callbacks to remove the sensor's visibility, then executing ransomware payload undetected.
+
+Respond to this threat: (1) Explain why Windows allows this signed-but-vulnerable driver to load and how Microsoft's vulnerable driver blocklist (WDAC) helps, (2) identify the specific Falcon prevention policy settings — kernel sensor enforcement, ASM policy, driver load prevention — that would block this chain, (3) describe how Falcon OverWatch hunts for kernel callback manipulation even when the sensor is blinded, (4) write a Sysmon + Splunk detection for RTCore64.sys or equivalent BYOVD candidates, (5) recommend a layered BYOVD defense strategy combining CrowdStrike, WDAC, and Hypervisor-Protected Code Integrity (HVCI).`,
+    keywords: ['BYOVD', 'RTCore64.sys', 'CVE-2019-16098', 'kernel callback', 'CrowdStrike Falcon', 'WDAC', 'HVCI', 'T1068', 'driver blocklist', 'ring-0'],
+    tools: ['CrowdStrike Falcon Console', 'Sysmon', 'Process Hacker', 'WinDbg', 'Splunk'],
+    framework: 'MITRE ATT&CK T1068',
+  },
+
+  {
+    id: 'lab-cs-rtr-forensics',
+    title: 'CrowdStrike Falcon RTR Forensic Investigation',
+    description: 'Use CrowdStrike Real Time Response to conduct live endpoint forensics and collect evidence during an active incident.',
+    category: 'EDR & Endpoint Security',
+    difficulty: 'intermediate',
+    estimatedMin: 35,
+    xpReward: 190,
+    accentColor: '#f87171',
+    scenario: 'You receive a Falcon alert: a PowerShell process on a CFO\'s laptop spawned an encoded command that downloaded a payload from a CDN domain. The endpoint is live and the user is still logged in. You need to use Falcon RTR to collect forensic evidence, determine scope, and contain the threat without disrupting business unnecessarily.',
+    tasks: [
+      'List the RTR commands used to collect running processes, network connections, and autorun persistence',
+      'Describe how to use RTR to collect memory artifacts (prefetch, Amcache, shimcache) without rebooting',
+      'Write the RTR script to extract and download the suspicious PowerShell encoded command and its decoded output',
+      'Explain how to contain the endpoint via RTR network isolation while preserving remote access for investigation',
+      'Define the RTR audit logging requirements and how to forward RTR session logs to your SIEM',
+    ],
+    labPrompt: `A Falcon detection fires: falcon_process_creation where parent_process = powershell.exe and command_line contains base64 encoding, on the CFO's laptop (Windows 11, Falcon sensor v7.x). The endpoint is live. Using RTR, you must collect evidence and contain the threat.
+
+Walk through: (1) the RTR commands to enumerate running processes (ps), network connections (netstat), and persistence mechanisms (reg query, sc query), (2) how to run a custom RTR script to decode the base64 PowerShell command and extract IOCs (domain, hash), (3) network isolation via RTR (contain command) and what connectivity is preserved for your investigation session, (4) file evidence collection with get command to pull the dropped payload to Falcon cloud for sandbox analysis, (5) RTR session audit trail: where RTR command logs are stored in Falcon, how to export them, and the SIEM rule to alert on unapproved RTR sessions outside business hours.`,
+    keywords: ['CrowdStrike RTR', 'Real Time Response', 'PowerShell', 'base64', 'network isolation', 'contain', 'forensics', 'RTR script', 'Falcon console', 'T1059.001'],
+    tools: ['CrowdStrike Falcon Console', 'RTR (Real Time Response)', 'CyberChef', 'Splunk'],
+    framework: 'NIST SP 800-61 Rev 2',
+  },
+
+  {
+    id: 'lab-cs-process-hollowing',
+    title: 'Process Hollowing Detection with Falcon',
+    description: 'Analyze how process hollowing evades EDR user-mode hooks and configure Falcon to detect it via kernel telemetry.',
+    category: 'EDR & Endpoint Security',
+    difficulty: 'advanced',
+    estimatedMin: 45,
+    xpReward: 245,
+    accentColor: '#f87171',
+    scenario: 'Ransomware actors are injecting their encryption payload into svchost.exe using process hollowing (T1055.012) with direct NTAPI syscalls (NtWriteVirtualMemory, NtCreateRemoteThread) to bypass Falcon\'s user-mode hooks. Falcon is detecting some of these but missing a subset. Your task is to tune Falcon detection and add compensating controls.',
+    tasks: [
+      'Explain the process hollowing technique and why direct syscalls bypass user-mode EDR hooks',
+      'Identify which Falcon sensor component (kernel vs user-mode) detects NtWriteVirtualMemory misuse',
+      'Describe the Falcon prevention policy settings that enable kernel-level process injection detection',
+      'Write a Falcon Insight/NG-SIEM query to hunt for hollowed svchost.exe instances with non-standard parent processes',
+      'Design a defence-in-depth approach combining Falcon kernel sensor, PPL (Protected Process Light), and memory integrity',
+    ],
+    labPrompt: `Process hollowing against svchost.exe is bypassing Falcon user-mode hooks by using direct syscalls (syscall stubs) to invoke NtWriteVirtualMemory and NtCreateRemoteThread without passing through ntdll.dll where Falcon's hooks live.
+
+Provide a complete analysis and remediation: (1) technical breakdown of the syscall-based process hollowing chain (T1055.012 + T1106) and why user-mode hook bypass (T1562.001) works, (2) which Falcon sensor setting — Kernel Mode Detection vs User Mode Detection — catches this and what must be enabled in the prevention policy, (3) write a Falcon Insight Event Search (FES) or LogScale/NG-SIEM query hunting for svchost.exe spawned by unusual parents with injected threads, (4) explain how Protected Process Light (PPL) for svchost combined with Memory Integrity (HVCI) raises the bar for this technique, (5) propose a tuning plan to reduce Falcon false-negatives on process injection while maintaining acceptable false-positive rate.`,
+    keywords: ['process hollowing', 'T1055.012', 'direct syscall', 'NtWriteVirtualMemory', 'CrowdStrike Falcon', 'kernel sensor', 'user-mode hook bypass', 'PPL', 'HVCI', 'svchost'],
+    tools: ['CrowdStrike Falcon Console', 'Falcon LogScale', 'Process Hacker', 'x64dbg'],
+    framework: 'MITRE ATT&CK T1055.012',
+  },
+
+  {
+    id: 'lab-cs-identity-kerberoasting',
+    title: 'Kerberoasting Detection via Falcon Identity Protection',
+    description: 'Use CrowdStrike Falcon Identity Threat Protection to detect and respond to Kerberoasting in Active Directory.',
+    category: 'EDR & Endpoint Security',
+    difficulty: 'advanced',
+    estimatedMin: 40,
+    xpReward: 235,
+    accentColor: '#f87171',
+    scenario: 'CrowdStrike Falcon Identity Threat Protection has fired an alert: "Kerberoasting — multiple TGS requests for RC4-encrypted service tickets from a single workstation within 60 seconds." The source host is a developer workstation; the targeted SPNs include SQL service accounts. Lateral movement to a file server was detected 12 minutes later.',
+    tasks: [
+      'Explain the Kerberoasting attack chain and why RC4 (etype 23) vs AES tickets is a key indicator',
+      'Describe how Falcon Identity Threat Protection detects Kerberoasting using DC telemetry',
+      'Write the response procedure: contain the source workstation, reset targeted service account passwords, and audit SPN registrations',
+      'Explain how to force AES-only Kerberos tickets on service accounts to mitigate Kerberoasting',
+      'Design a service account hygiene policy using Managed Service Accounts (gMSA) and Falcon Identity monitoring',
+    ],
+    labPrompt: `Falcon Identity Threat Protection fires: KerberoastingDetected — 47 TGS requests for RC4-encrypted tickets (etype 23) targeting MSSQL, HTTP, and backup SPNs from workstation WS-DEV-041 in under 60 seconds. Lateral movement to FS-CORP-01 detected 12 minutes later using the cracked SQL service account credentials.
+
+Conduct full IR: (1) explain the Kerberoasting kill chain (T1558.003): AS-REQ → TGT → TGS-REQ with RC4 preference → offline cracking with Hashcat, (2) how Falcon Identity Threat Protection's DC sensor captures TGS request volume and etype anomalies to fire the alert, (3) immediate containment: network isolate WS-DEV-041 via Falcon RTR, force password reset on all targeted service accounts, invalidate active Kerberos tickets (klist purge), (4) hardening: enforce AES256/AES128-only encryption on all service account objects (msDS-SupportedEncryptionTypes = 24), deploy gMSA for all service accounts with automatic 30-day password rotation, (5) write the Falcon Identity custom detection rule to alert on > 10 RC4 TGS requests from a single host in 5 minutes.`,
+    keywords: ['Kerberoasting', 'T1558.003', 'RC4', 'TGS', 'SPN', 'CrowdStrike Falcon Identity', 'gMSA', 'AES Kerberos', 'Active Directory', 'Hashcat'],
+    tools: ['CrowdStrike Falcon Identity Protection', 'Falcon RTR', 'Active Directory Users & Computers', 'BloodHound'],
+    framework: 'MITRE ATT&CK T1558.003',
+  },
 ];
 
 export function searchLabs(query: string, category?: string): StandaloneLab[] {

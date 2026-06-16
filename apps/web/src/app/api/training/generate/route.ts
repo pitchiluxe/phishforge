@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import OpenAI from 'openai';
+import { callOpenRouter, extractFinalAnswer } from '@/lib/ai/openrouter';
 
 const SCENARIO_SEEDS = [
   { category: 'Phishing', difficulty: 'intermediate' },
@@ -35,20 +35,15 @@ const LAB_SEEDS = [
   { title: 'OSINT Recon & Attack Surface Mapping', category: 'Reconnaissance', difficulty: 'beginner' },
   { title: 'Email Header Forensics', category: 'Incident Response', difficulty: 'beginner' },
   { title: 'JWT & OAuth Token Abuse', category: 'Web Security', difficulty: 'advanced' },
+  // CrowdStrike / Falcon / EDR
+  { title: 'CrowdStrike Falcon Sensor Tamper Detection', category: 'Endpoint Security', difficulty: 'advanced' },
+  { title: 'BYOVD Attack Simulation & Falcon Defense', category: 'Endpoint Security', difficulty: 'advanced' },
+  { title: 'Falcon RTR Forensic Investigation', category: 'Incident Response', difficulty: 'intermediate' },
+  { title: 'EDR Process Hollowing Detection with Falcon', category: 'Malware Analysis', difficulty: 'advanced' },
+  { title: 'Kerberoasting Detection via Falcon Identity Protection', category: 'Identity Security', difficulty: 'advanced' },
+  { title: 'CrowdStrike Falcon for Cloud Container Escape', category: 'Cloud Security', difficulty: 'advanced' },
+  { title: 'CrowdStrike OverWatch Alert Triage', category: 'SOC Operations', difficulty: 'intermediate' },
 ];
-
-const FREE_MODELS = [
-  'deepseek/deepseek-r1:free',
-  'google/gemini-2.0-flash-exp:free',
-  'meta-llama/llama-3.3-70b-instruct:free',
-  'qwen/qwen3-8b:free',
-  'mistralai/mistral-7b-instruct:free',
-];
-
-function extractFinalAnswer(text: string): string {
-  const thinkEnd = text.lastIndexOf('</think>');
-  return thinkEnd !== -1 ? text.slice(thinkEnd + 8).trim() : text.trim();
-}
 
 function extractJSON(text: string): any {
   const cleaned = extractFinalAnswer(text);
@@ -57,41 +52,11 @@ function extractJSON(text: string): any {
   return JSON.parse(jsonMatch[0]);
 }
 
-async function callAI(client: OpenAI, defaultModel: string, system: string, user: string): Promise<string> {
-  const models = [defaultModel, ...FREE_MODELS.filter(m => m !== defaultModel)];
-  let lastErr: Error | null = null;
-  for (const m of models) {
-    try {
-      const res = await client.chat.completions.create({
-        model: m,
-        messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
-        temperature: 0.85,
-        max_tokens: 1500,
-      });
-      const c = res.choices[0].message.content ?? '';
-      if (c) return c;
-    } catch (e: unknown) {
-      lastErr = e instanceof Error ? e : new Error(String(e));
-    }
-  }
-  throw lastErr ?? new Error('All models failed');
-}
-
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
     const type: 'scenario' | 'lab' | 'batch-scenarios' = body.type ?? 'scenario';
     const count = Math.min(body.count ?? 1, 6);
-
-    const client = new OpenAI({
-      apiKey: process.env.OPENROUTER_API_KEY!,
-      baseURL: process.env.OPENROUTER_BASE_URL ?? 'https://openrouter.ai/api/v1',
-      defaultHeaders: {
-        'HTTP-Referer': process.env.OPENROUTER_SITE_URL ?? 'https://phishforge.ai',
-        'X-Title': 'PhishForge Training',
-      },
-    });
-    const defaultModel = process.env.OPENROUTER_DEFAULT_MODEL ?? 'deepseek/deepseek-r1:free';
 
     if (type === 'batch-scenarios') {
       // Generate multiple scenario summaries in one call
@@ -119,12 +84,15 @@ Return ONLY a JSON array:
   }
 ]`;
 
-      const raw = await callAI(client, defaultModel, system, user);
-      const cleaned = extractFinalAnswer(raw);
+      const result = await callOpenRouter(
+        [{ role: 'system', content: system }, { role: 'user', content: user }],
+        { maxTokens: 1500, temperature: 0.85 },
+      );
+      const cleaned = extractFinalAnswer(result.content);
       const arrMatch = cleaned.match(/\[[\s\S]*\]/);
       if (!arrMatch) throw new Error('No array in response');
       const scenarios = JSON.parse(arrMatch[0]);
-      return NextResponse.json({ scenarios, model: defaultModel });
+      return NextResponse.json({ scenarios, model: result.model });
     }
 
     if (type === 'lab') {
@@ -188,10 +156,13 @@ Return ONLY valid JSON:
   ]
 }`;
 
-      const raw = await callAI(client, defaultModel, system, user);
-      const lab = extractJSON(raw);
+      const result = await callOpenRouter(
+        [{ role: 'system', content: system }, { role: 'user', content: user }],
+        { maxTokens: 1500, temperature: 0.85 },
+      );
+      const lab = extractJSON(result.content);
       lab.id = lab.id ?? `ai-lab-${Date.now()}`;
-      return NextResponse.json({ lab, model: defaultModel });
+      return NextResponse.json({ lab, model: result.model });
     }
 
     // Single scenario
@@ -217,10 +188,13 @@ Return ONLY valid JSON:
   "xpReward": <75-200>
 }`;
 
-    const raw = await callAI(client, defaultModel, system, user);
-    const scenario = extractJSON(raw);
+    const result = await callOpenRouter(
+      [{ role: 'system', content: system }, { role: 'user', content: user }],
+      { maxTokens: 1000, temperature: 0.85 },
+    );
+    const scenario = extractJSON(result.content);
     scenario.id = scenario.id ?? `ai-scenario-${Date.now()}`;
-    return NextResponse.json({ scenario, model: defaultModel });
+    return NextResponse.json({ scenario, model: result.model });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Generation failed';
     return NextResponse.json({ error: msg }, { status: 500 });

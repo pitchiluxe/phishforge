@@ -17,11 +17,12 @@ export async function POST(req: NextRequest) {
 
 Rules:
 - Mix severities: ~20% critical, ~35% high, ~30% medium, ~15% low
-- Mix categories: ransomware, apt, phishing, bec, supply-chain, cloud-misconfiguration, social-engineering, credential-theft, malware, insider-threat, web-attack, ai-threat, zero-day, lateral-movement
+- Mix categories: ransomware, apt, phishing, bec, supply-chain, cloud-misconfiguration, social-engineering, credential-theft, malware, insider-threat, web-attack, ai-threat, zero-day, lateral-movement, edr-bypass, edr-tampering
 - Mix industries: finance, healthcare, tech, government, retail, energy, education, manufacturing, saas
 - Reference real 2025-2026 threat actors (LockBit 4.0, Volt Typhoon, Scattered Spider, Midnight Blizzard, FIN7, Lazarus Group, etc.)
 - Include real CVEs, MITRE ATT&CK technique IDs, and tool names
 - Make descriptions technically specific, not generic
+- IMPORTANT: At least 4 items must be specifically about CrowdStrike Falcon Sensor, CrowdStrike EDR, CrowdStrike Falcon Identity Protection, or CrowdStrike RTR (Real Time Response). Cover topics like: BYOVD attacks bypassing Falcon, Falcon sensor tampering, EDR telemetry evasion against CrowdStrike, Falcon content-update pipeline risks, container escape gaps in Falcon for Cloud, Kerberoasting in partial Falcon deployments, process hollowing defeating Falcon hooks, insider abuse of Falcon RTR sessions.
 - Return ONLY the JSON array — no markdown fences, no preamble`;
 
   let raw = '';

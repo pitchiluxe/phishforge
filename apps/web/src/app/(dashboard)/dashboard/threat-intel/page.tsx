@@ -123,6 +123,56 @@ const STATIC_THREATS: ThreatItem[] = [
     description: 'Cl0p ransomware gang continues mass exploitation of SQL injection vulnerabilities in MOVEit Transfer and MOVEit Cloud. Over 2,600 organisations affected globally, including government agencies and major financial institutions. Stolen data appears on dark web extortion portals months after initial breach.',
     industries: ['government', 'finance', 'healthcare', 'education'], published_at: new Date(Date.now() - 16 * 86400000).toISOString(), mitre: 'T1190, T1505.003, T1041',
   },
+
+  // ── CrowdStrike / Falcon Sensor / EDR ────────────────────────────────────
+  {
+    id: 'st-cs-001', title: 'CrowdStrike Falcon Sensor kernel driver exploitation via CVE-2024-6197',
+    severity: 'critical', category: 'edr-bypass',
+    description: 'Threat actors are reverse-engineering the CrowdStrike Falcon sensor kernel driver to identify memory corruption primitives. Exploiting a race condition in the Falcon content-update pipeline (similar to the July 2024 BSOD incident) allows attackers to load unsigned kernel modules on Windows hosts, bypassing Falcon\'s tamper-protection and achieving kernel-level persistence.',
+    industries: ['all'], published_at: new Date(Date.now() - 2 * 86400000).toISOString(), mitre: 'T1014, T1547.006, T1562.001',
+  },
+  {
+    id: 'st-cs-002', title: 'Falcon Sensor tampering: attackers disabling EDR via WMI event subscriptions',
+    severity: 'high', category: 'edr-bypass',
+    description: 'Post-compromise actors with local admin rights are using WMI permanent event subscriptions to monitor for the CrowdStrike CSFalconService and terminate it before executing ransomware payloads. The technique avoids direct process termination (which Falcon blocks) by chaining WMI consumer scripts that delay execution until Falcon\'s driver call hooks are temporarily suspended during service restart windows.',
+    industries: ['all'], published_at: new Date(Date.now() - 4 * 86400000).toISOString(), mitre: 'T1562.001, T1546.003, T1489',
+  },
+  {
+    id: 'st-cs-003', title: 'CrowdStrike Identity Protection gap: Kerberoasting in air-gapped sensor deployments',
+    severity: 'high', category: 'identity-attack',
+    description: 'In environments where Falcon Identity Threat Protection sensors are not deployed on all domain controllers, Kerberoasting attacks against service accounts remain undetected. Red teams are deliberately targeting DCs without Falcon coverage to extract TGS tickets for offline cracking, exploiting the visibility gap created by partial sensor deployments.',
+    industries: ['finance', 'government', 'healthcare'], published_at: new Date(Date.now() - 6 * 86400000).toISOString(), mitre: 'T1558.003, T1078.002',
+  },
+  {
+    id: 'st-cs-004', title: 'Bring-Your-Own-Vulnerable-Driver (BYOVD) attack bypassing Falcon\'s kernel protections',
+    severity: 'critical', category: 'edr-bypass',
+    description: 'BlackCat/ALPHV affiliates are deploying signed but vulnerable Windows kernel drivers (e.g., RTCore64.sys, gdrv.sys) to achieve ring-0 code execution and blind CrowdStrike Falcon before dropping ransomware. Falcon\'s vulnerable driver blocklist requires manual updates and may lag behind newly discovered BYOVD candidates by days to weeks.',
+    industries: ['finance', 'healthcare', 'manufacturing'], published_at: new Date(Date.now() - 8 * 86400000).toISOString(), mitre: 'T1068, T1562.001, T1486',
+  },
+  {
+    id: 'st-cs-005', title: 'CrowdStrike Falcon RTR (Real Time Response) sessions abused by insiders',
+    severity: 'high', category: 'insider-threat',
+    description: 'Security engineers with CrowdStrike Falcon console access are abusing Real Time Response sessions to exfiltrate files and execute commands on endpoints outside their authorized scope. Falcon RTR sessions are not always logged to external SIEM, creating audit blind spots. Organisations should enforce RTR session approval workflows and forward all RTR audit logs to a separate immutable log store.',
+    industries: ['tech', 'finance', 'saas'], published_at: new Date(Date.now() - 10 * 86400000).toISOString(), mitre: 'T1059, T1052, T1078',
+  },
+  {
+    id: 'st-cs-006', title: 'Falcon Sensor update pipeline supply chain risk: content channel poisoning',
+    severity: 'critical', category: 'supply-chain',
+    description: 'Security researchers have demonstrated that the rapid content update mechanism CrowdStrike uses to push new detection rules (channel files) can be weaponised if an attacker compromises CrowdStrike\'s update signing infrastructure. A malformed channel file similar to the July 2024 incident could be weaponised to trigger a global sensor crash as a coordinated denial-of-service, or to deliver malicious logic to millions of endpoints simultaneously.',
+    industries: ['all'], published_at: new Date(Date.now() - 12 * 86400000).toISOString(), mitre: 'T1195.002, T1499, T1485',
+  },
+  {
+    id: 'st-cs-007', title: 'EDR telemetry evasion: process hollowing in signed Windows binaries defeats Falcon',
+    severity: 'high', category: 'edr-bypass',
+    description: 'Ransomware operators targeting Falcon-protected environments are using process hollowing within signed Microsoft binaries (msiexec.exe, svchost.exe) to execute malicious shellcode inside trusted processes. When combined with direct syscall invocation to bypass Falcon\'s user-mode hooks, this technique achieves full code execution without triggering behavioural detections.',
+    industries: ['all'], published_at: new Date(Date.now() - 14 * 86400000).toISOString(), mitre: 'T1055.012, T1106, T1562.001',
+  },
+  {
+    id: 'st-cs-008', title: 'CrowdStrike Falcon for Cloud: container escape detection gap in privileged pods',
+    severity: 'high', category: 'cloud-misconfiguration',
+    description: 'Falcon for Containers sensor coverage gaps exist in Kubernetes clusters running privileged pods. Container escape techniques using hostPath volume mounts and host network namespaces are inconsistently detected when the node-level Falcon sensor is running in a compatibility mode required by older kernel versions. Organisations should validate Falcon coverage with a container escape simulation before production deployment.',
+    industries: ['tech', 'saas', 'fintech'], published_at: new Date(Date.now() - 17 * 86400000).toISOString(), mitre: 'T1611, T1552.007, T1612',
+  },
 ];
 
 export default async function ThreatIntelPage() {

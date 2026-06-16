@@ -2213,4 +2213,109 @@ Modern ransomware is double-extortion: encrypt files AND exfiltrate data. Groups
       SIM('soc-ransom-sim1', 'Active Ransomware Response', 100, 'It is 3 AM. Your monitoring shows: 10,000 files encrypted across 40 servers in the last 20 minutes. Ransom note says "LockBit 3.0 — pay $2M in 72 hours or your 500GB of customer data gets published." You are the incident commander. Walk through your complete response: immediate isolation steps, who you call and in what order, how you assess backup integrity, the legal and compliance notifications required within 72 hours, and how you make the ransom payment decision.'),
     ],
   },
+
+  // ══════════════════════════════════════════════════
+  // CROWDSTRIKE / FALCON SENSOR / EDR  (1 course)
+  // ══════════════════════════════════════════════════
+
+  {
+    id: 'cs-falcon-edr',
+    title: 'CrowdStrike Falcon Sensor & EDR Mastery',
+    description: 'Deep-dive into CrowdStrike Falcon Sensor architecture, EDR bypass techniques, and real-world hardening — from BYOVD attacks and tamper protection to Falcon Identity and RTR forensics.',
+    category: 'endpoint-security',
+    difficulty: 'advanced',
+    accentColor: '#f87171',
+    modules: [
+      L('cs-l1', 'Falcon Sensor Architecture & Kernel Components', 120, `## CrowdStrike Falcon Sensor Architecture
+
+CrowdStrike Falcon is a cloud-native EDR platform. Understanding its internal architecture is essential for both defenders and adversaries.
+
+## Sensor Components
+
+### Kernel-Mode Driver (csagent.sys / csagentcore.sys)
+The core sensor driver runs in ring-0 with the highest privilege level. It registers:
+- **Process creation callbacks** (PsSetCreateProcessNotifyRoutineEx) — intercepts every new process
+- **Image load callbacks** (PsSetLoadImageNotifyRoutine) — catches DLL and driver loads
+- **Thread creation callbacks** — detects remote thread injection
+- **File system mini-filter** (FltRegisterFilter) — monitors I/O operations for ransomware patterns
+
+### User-Mode Component (falconsvr.exe / CSFalconService)
+Coordinates communications between the kernel driver and the Falcon cloud. Responsible for:
+- Streaming telemetry events to CrowdStrike cloud (ZeroTrust Assessment, process trees)
+- Fetching detection content updates (channel files)
+- Executing Real Time Response (RTR) commands
+
+### Channel Files (Detection Content)
+Falcon pushes detection logic as "channel files" (C-0000*.sys) to the sensor — this is the rapid content update mechanism. Each file encodes behavioural detection rules. A corrupt channel file (as in the July 2024 incident) causes a null pointer dereference in csagent.sys → BSOD.
+
+## Tamper Protection
+Falcon's tamper protection prevents:
+- Direct termination of CSFalconService (blocked at kernel level)
+- Unloading csagent.sys without a maintenance token
+- Registry modification of sensor configuration keys
+
+**Bypass technique (T1562.001):** WMI permanent event subscriptions can monitor for service restart events and chain a kill command during the brief window when tamper protection is temporarily suspended during service restart.
+
+## Prevention Policy Layers
+| Layer | Technology | Blocks |
+|-------|-----------|--------|
+| Kernel sensor | csagent.sys ring-0 | Process injection, BYOVD, callback tampering |
+| Machine Learning | On-sensor ML model | Unknown malware by PE features |
+| Behavioral AI | Cloud + local | Attack chain patterns |
+| NGAV | File scanning | Known malicious hashes |
+
+## Real-World Insight: July 2024 Sensor Outage
+A malformed channel file (C-00000291) contained an invalid field count. When csagent.sys tried to parse the content, it triggered a null pointer dereference, causing 8.5 million Windows hosts to BSOD. This demonstrated that the content-update pipeline — not the core driver — is the highest-risk attack surface in a CrowdStrike deployment.`),
+
+      LAB('cs-lab1', 'Falcon Sensor Tamper Detection Lab', 150,
+        `You are the lead EDR engineer responding to a Falcon tamper incident. CrowdStrike OverWatch has flagged that CSFalconService was stopped on 12 endpoints using WMI event subscriptions 45 minutes before a ransomware payload detonated.
+
+Analyze the complete attack chain: (1) Explain how WMI permanent event subscriptions (T1546.003) were used to monitor for the sensor service and terminate it during restart windows without triggering tamper protection. (2) Identify the specific Windows Event IDs (4688, 7036, 7045) and Falcon events that should have generated alerts. (3) Write a Splunk SPL query to alert on CSFalconService stops outside approved maintenance windows. (4) Describe the Falcon prevention policy settings — sensor tamper protection mode, maintenance token requirements, and audit log forwarding — that would have prevented or detected this attack. (5) Design a hardening checklist for Falcon sensor tamper protection in an enterprise Windows environment.`,
+        ['CSFalconService', 'WMI event subscription', 'T1546.003', 'tamper protection', 'maintenance token', 'Windows Event 7036', 'Splunk SPL', 'T1562.001', 'sensor hardening']),
+
+      L('cs-l2', 'BYOVD Attacks & Falcon Kernel Defense', 130, `## Bring-Your-Own-Vulnerable-Driver (BYOVD) Attacks
+
+BYOVD is a critical threat to CrowdStrike Falcon and all kernel-level EDR solutions.
+
+## Attack Chain
+1. **Attacker drops a signed but vulnerable driver** (e.g., RTCore64.sys by Micro-Star, gdrv.sys by GIGABYTE)
+2. **Driver is loaded via sc.exe or NtLoadDriver** — Windows allows it because the driver is signed by a legitimate vendor
+3. **Driver's IOCTL interface is abused** to achieve arbitrary kernel memory read/write (CVE-2019-16098 for RTCore64)
+4. **Attacker patches Falcon's kernel callback registrations** — removes csagent.sys from Windows kernel notify lists
+5. **Falcon is now blind** — kernel callbacks removed, new processes/threads no longer reported to sensor
+6. **Ransomware payload executes undetected** at kernel level or user-mode under sensor-blind conditions
+
+## Why Signed Drivers Are Trusted
+Windows requires kernel-mode drivers to be signed by Microsoft (WHQL) or via a trusted CA. The BYOVD technique abuses legitimately signed vendor drivers that contain exploitable vulnerabilities but have not been revoked.
+
+## CrowdStrike Defenses Against BYOVD
+- **Vulnerable Driver Blocklist** — Falcon maintains a blocklist of known-vulnerable driver hashes. Updated via content channel files. **Gap:** New BYOVD candidates may have a 24–72 hour window before blocklist update.
+- **Kernel Sensor Hardening** — Falcon's own kernel callbacks use Protected Process Light (PPL) semantics. Patching them requires SYSTEM + SeLoadDriverPrivilege.
+- **WDAC (Windows Defender Application Control)** — Complementary Microsoft control that can block driver loading by hash or publisher before the driver reaches kernel space.
+- **HVCI (Hypervisor-Protected Code Integrity)** — Prevents kernel code pages from being modified, eliminating the memory-write primitive that BYOVD exploits.
+
+## Recommended Layered Defense
+\`\`\`
+BYOVD Prevention Stack
+├── HVCI (Memory Integrity) — blocks kernel memory write primitives
+├── WDAC Policy — allowlist approved drivers by hash/publisher
+├── Falcon Vulnerable Driver Blocklist — behavioral block on load
+└── Falcon Kernel Sensor + OverWatch — detect callback manipulation
+\`\`\`
+
+## Real-World Examples
+- **BlackCat/ALPHV** — Used gdrv.sys for BYOVD to disable EDR before ransomware deployment
+- **Scattered Spider** — Deployed mhyprot2.sys (Genshin Impact driver) on enterprise targets
+- **RobbinHood** — Combined BYOVD with Falcon blind for stealthy ransomware execution`),
+
+      SIM('cs-sim1', 'BYOVD Incident Live Response', 120,
+        'CrowdStrike OverWatch has detected RTCore64.sys loaded by a non-system process on your most critical domain controller. You have 5 minutes before the attacker patches kernel callbacks and goes dark. The DC cannot be rebooted. You have Falcon RTR access. Walk through your live response: what you collect first, how you verify Falcon sensor integrity, whether and how to isolate the DC, and your containment decision when rebooting is not an option.'),
+
+      LAB('cs-lab2', 'Falcon Identity: Kerberoasting Detection & Hardening', 170,
+        `Falcon Identity Threat Protection has fired: KerberoastingDetected — 47 TGS requests for RC4-encrypted tickets (etype 23) targeting MSSQL, HTTP, and backup SPNs from workstation WS-DEV-041 in under 60 seconds. Lateral movement to FS-CORP-01 was detected 12 minutes later using cracked SQL service account credentials.
+
+Conduct full incident response and hardening: (1) Explain the Kerberoasting kill chain (T1558.003) — AS-REQ → TGT → TGS with RC4 preference → offline Hashcat cracking — and why etype 23 is the critical indicator. (2) Describe how Falcon Identity Threat Protection's DC sensor captures TGS request volume and etype anomalies to fire the detection. (3) Immediate containment: isolate WS-DEV-041 via Falcon RTR contain command, force password reset on all targeted SPNs, and invalidate active Kerberos tickets. (4) Hardening: enforce AES256/AES128-only Kerberos (msDS-SupportedEncryptionTypes = 24) on all service accounts, migrate service accounts to Group Managed Service Accounts (gMSA) with automatic 30-day password rotation. (5) Write a Falcon Identity custom detection rule to alert on > 10 RC4-encrypted TGS requests from a single host within a 5-minute window.`,
+        ['Kerberoasting', 'T1558.003', 'RC4 etype 23', 'TGS', 'SPN', 'Falcon Identity', 'gMSA', 'AES Kerberos', 'msDS-SupportedEncryptionTypes', 'Hashcat']),
+    ],
+  },
 ];

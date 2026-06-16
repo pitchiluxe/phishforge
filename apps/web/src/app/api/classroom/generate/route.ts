@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import OpenAI from 'openai';
+import { callOpenRouter, extractFinalAnswer } from '@/lib/ai/openrouter';
 
 const COURSE_TOPICS = [
   'Advanced Phishing Attack Techniques 2025',
@@ -22,6 +22,15 @@ const COURSE_TOPICS = [
   'API Security & OAuth 2.0 Hardening',
   'Dark Web Intelligence & OSINT',
   'Email Security & Anti-Spoofing (DKIM/SPF/DMARC)',
+  // CrowdStrike / Falcon / EDR
+  'CrowdStrike Falcon Sensor Deployment & Hardening',
+  'EDR Evasion Techniques & Falcon Counter-Measures',
+  'CrowdStrike Falcon Identity Threat Protection',
+  'CrowdStrike RTR (Real Time Response) for Incident Responders',
+  'BYOVD Attacks & CrowdStrike Kernel Defense',
+  'CrowdStrike Falcon for Cloud & Container Security',
+  'EDR Telemetry Analysis with CrowdStrike Insight',
+  'Detecting EDR Tampering with CrowdStrike OverWatch',
 ];
 
 const LAB_TOPICS = [
@@ -40,20 +49,15 @@ const LAB_TOPICS = [
   'PowerShell Security & Script Block Logging',
   'Zero-Day Vulnerability Triage',
   'Honeypot Deployment & Monitoring',
+  // CrowdStrike / Falcon / EDR labs
+  'CrowdStrike Falcon Sensor Tamper Detection Lab',
+  'BYOVD Attack Simulation & Falcon Defense Lab',
+  'Falcon RTR Forensic Investigation Lab',
+  'EDR Process Hollowing Detection with Falcon',
+  'CrowdStrike Falcon for Cloud Container Escape Lab',
+  'Kerberoasting Detection using Falcon Identity Protection',
+  'CrowdStrike OverWatch Alert Triage Lab',
 ];
-
-const FREE_MODELS = [
-  'deepseek/deepseek-r1:free',
-  'google/gemini-2.0-flash-exp:free',
-  'meta-llama/llama-3.3-70b-instruct:free',
-  'qwen/qwen3-8b:free',
-  'mistralai/mistral-7b-instruct:free',
-];
-
-function extractFinalAnswer(text: string): string {
-  const thinkEnd = text.lastIndexOf('</think>');
-  return thinkEnd !== -1 ? text.slice(thinkEnd + 8).trim() : text.trim();
-}
 
 function extractJSON(text: string): any {
   const cleaned = extractFinalAnswer(text);
@@ -62,44 +66,11 @@ function extractJSON(text: string): any {
   return JSON.parse(jsonMatch[0]);
 }
 
-async function callAI(client: OpenAI, defaultModel: string, systemPrompt: string, userPrompt: string): Promise<string> {
-  const modelsToTry = [defaultModel, ...FREE_MODELS.filter(m => m !== defaultModel)];
-  let lastErr: Error | null = null;
-  for (const m of modelsToTry) {
-    try {
-      const res = await client.chat.completions.create({
-        model: m,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
-        ],
-        temperature: 0.8,
-        max_tokens: 2000,
-      });
-      const content = res.choices[0].message.content ?? '';
-      if (content) return content;
-    } catch (e: unknown) {
-      lastErr = e instanceof Error ? e : new Error(String(e));
-    }
-  }
-  throw lastErr ?? new Error('All models failed');
-}
-
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
     const type: 'course' | 'lab' = body.type ?? 'course';
     const providedTopic: string | undefined = body.topic;
-
-    const client = new OpenAI({
-      apiKey: process.env.OPENROUTER_API_KEY!,
-      baseURL: process.env.OPENROUTER_BASE_URL ?? 'https://openrouter.ai/api/v1',
-      defaultHeaders: {
-        'HTTP-Referer': process.env.OPENROUTER_SITE_URL ?? 'https://phishforge.ai',
-        'X-Title': 'PhishForge Classroom',
-      },
-    });
-    const defaultModel = process.env.OPENROUTER_DEFAULT_MODEL ?? 'deepseek/deepseek-r1:free';
 
     if (type === 'lab') {
       const topic = providedTopic ?? LAB_TOPICS[Math.floor(Math.random() * LAB_TOPICS.length)];
@@ -126,12 +97,15 @@ Return ONLY valid JSON matching this exact schema:
   "tags": ["<tag 1>", "<tag 2>", "<tag 3>"]
 }`;
 
-      const raw = await callAI(client, defaultModel, systemPrompt, userPrompt);
-      const lab = extractJSON(raw);
+      const result = await callOpenRouter(
+        [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
+        { maxTokens: 2000, temperature: 0.8 },
+      );
+      const lab = extractJSON(result.content);
       lab.id = lab.id ?? `ai-lab-${Date.now()}`;
       lab.accentColor = lab.accentColor ?? '#00ff41';
 
-      return NextResponse.json({ lab, model: defaultModel });
+      return NextResponse.json({ lab, model: result.model });
     }
 
     // type === 'course'
@@ -197,12 +171,15 @@ Return ONLY valid JSON matching this exact schema:
   ]
 }`;
 
-    const raw = await callAI(client, defaultModel, systemPrompt, userPrompt);
-    const course = extractJSON(raw);
+    const result = await callOpenRouter(
+      [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
+      { maxTokens: 3000, temperature: 0.8 },
+    );
+    const course = extractJSON(result.content);
     course.id = course.id ?? `ai-course-${Date.now()}`;
     course.accentColor = course.accentColor ?? '#00ff41';
 
-    return NextResponse.json({ course, model: defaultModel });
+    return NextResponse.json({ course, model: result.model });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Generation failed';
     return NextResponse.json({ error: msg }, { status: 500 });
