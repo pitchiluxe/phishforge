@@ -6,25 +6,25 @@ import { usePathname, useRouter } from 'next/navigation';
 import {
   Shield, LayoutDashboard, Mail, FileText, BookOpen, BarChart3,
   Settings, Users, Brain, AlertTriangle, CreditCard, LogOut, ChevronLeft, X,
-  GraduationCap, Target, Trophy, Cpu, BrainCircuit, Newspaper,
+  GraduationCap, Target, Trophy, Cpu, BrainCircuit, Newspaper, Youtube, Sparkles,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { createClient } from '@/lib/supabase/client';
 import { useDashboard } from './dashboard-context';
 
 const NAV_ITEMS = [
-  { href: '/dashboard', label: 'Overview', icon: LayoutDashboard, exact: true },
-  { href: '/dashboard/campaigns', label: 'Campaigns', icon: Mail },
-  { href: '/dashboard/templates', label: 'Templates', icon: FileText },
-  { href: '/dashboard/classroom', label: 'Classroom', icon: GraduationCap },
-  { href: '/dashboard/training', label: 'AI Training', icon: Target },
-  { href: '/dashboard/leaderboard', label: 'Leaderboard', icon: Trophy },
-  { href: '/dashboard/cyberlm', label: 'CyberLM', icon: Cpu },
-  { href: '/dashboard/knowledge', label: 'Knowledge Base', icon: BookOpen },
-  { href: '/dashboard/threat-intel', label: 'Threat Intel', icon: AlertTriangle },
-  { href: '/dashboard/analytics', label: 'Analytics', icon: BarChart3 },
-  { href: '/dashboard/cybernews', label: 'CyberNews', icon: Newspaper },
-] as const;
+  { href: '/dashboard',               label: 'Overview',      icon: LayoutDashboard, exact: true },
+  { href: '/dashboard/campaigns',     label: 'Campaigns',     icon: Mail },
+  { href: '/dashboard/templates',     label: 'Templates',     icon: FileText },
+  { href: '/dashboard/classroom',     label: 'Classroom',     icon: GraduationCap,  badge: 'NEW' as const },
+  { href: '/dashboard/training',      label: 'AI Training',   icon: Target,          badge: 'HOT' as const },
+  { href: '/dashboard/leaderboard',   label: 'Leaderboard',  icon: Trophy },
+  { href: '/dashboard/cyberlm',       label: 'CyberLM',       icon: Cpu,             badge: 'HOT' as const },
+  { href: '/dashboard/knowledge',     label: 'Knowledge Base',icon: BookOpen },
+  { href: '/dashboard/threat-intel',  label: 'Threat Intel',  icon: AlertTriangle },
+  { href: '/dashboard/analytics',     label: 'Analytics',     icon: BarChart3 },
+  { href: '/dashboard/cybernews',     label: 'CyberNews',     icon: Newspaper,       badge: 'NEW' as const },
+];
 
 const BOTTOM_ITEMS = [
   { href: '/dashboard/users', label: 'Users', icon: Users },
@@ -63,8 +63,14 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
     exact ? pathname === href : pathname.startsWith(href);
 
   async function handleSignOut() {
-    const supabase = createClient();
-    await supabase.auth.signOut();
+    try {
+      const supabase = createClient();
+      await supabase.auth.signOut();
+    } catch {
+      // ignore — may fail in demo mode or if Supabase is not configured
+    }
+    // Clear demo cookie so middleware lets the login page load
+    document.cookie = 'pf_demo=; path=/; max-age=0';
     router.push('/login');
   }
 
@@ -197,6 +203,20 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
             </span>
           )}
         </button>
+
+        {/* Tube — cybersecurity YouTube, positioned after CyberBrain */}
+        <NavItem
+          item={{ href: '/dashboard/tube', label: 'Tube', icon: Youtube, badge: 'NEW' as const }}
+          active={isActive('/dashboard/tube')}
+          collapsed={collapsed}
+        />
+
+        {/* Mentorship — curated cybersecurity courses by skill level */}
+        <NavItem
+          item={{ href: '/dashboard/mentorship', label: 'Mentorship', icon: Sparkles, badge: 'NEW' as const }}
+          active={isActive('/dashboard/mentorship')}
+          collapsed={collapsed}
+        />
       </nav>
 
       {/* Bottom nav */}
@@ -239,7 +259,7 @@ function NavItem({
   active,
   collapsed,
 }: {
-  item: { href: string; label: string; icon: React.ElementType };
+  item: { href: string; label: string; icon: React.ElementType; badge?: 'NEW' | 'HOT' };
   active: boolean;
   collapsed?: boolean;
 }) {
@@ -271,7 +291,6 @@ function NavItem({
         position: 'relative',
       }}
       onMouseEnter={e => {
-        // Redundant prefetch on hover as a secondary trigger
         router.prefetch(item.href);
         if (!active) {
           e.currentTarget.style.background = 'rgba(0,255,65,0.07)';
@@ -285,7 +304,30 @@ function NavItem({
       }}
     >
       <Icon size={collapsed ? 16 : 14} style={{ flexShrink: 0, opacity: active ? 0.85 : 0.7 }} />
-      {!collapsed && <span>{item.label}</span>}
+      {!collapsed && (
+        <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+          {item.label}
+          {item.badge === 'NEW' && (
+            <span style={{
+              fontSize: 8, fontWeight: 700, letterSpacing: '0.05em',
+              background: 'rgba(52,211,153,0.15)', color: '#34d399',
+              border: '1px solid rgba(52,211,153,0.3)',
+              padding: '1px 5px', borderRadius: 3,
+            }}>
+              NEW
+            </span>
+          )}
+          {item.badge === 'HOT' && (
+            <span style={{
+              fontSize: 8, fontWeight: 700, letterSpacing: '0.05em',
+              color: '#f87171', animation: 'pulse 2s cubic-bezier(0.4,0,0.6,1) infinite',
+              textShadow: '0 0 8px rgba(248,113,113,0.8)',
+            }}>
+              HOT
+            </span>
+          )}
+        </span>
+      )}
     </Link>
   );
 }
