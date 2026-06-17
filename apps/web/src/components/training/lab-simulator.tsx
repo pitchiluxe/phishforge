@@ -685,7 +685,6 @@ const CATEGORY_ICON_MAP: Record<string, React.ElementType> = {
   'Wireless': Wifi,
   'Penetration Testing': Target,
   'Identity & Access': Lock,
-  'Exploit Development': Cpu,
 };
 
 interface AILabTopic extends Omit<LabTopic, 'icon'> {
