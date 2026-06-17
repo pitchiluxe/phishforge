@@ -13,7 +13,6 @@ import {
   Bug,
   Eye,
   GraduationCap,
-  Wrench,
   ChevronRight,
   Key,
   ExternalLink,
@@ -96,10 +95,15 @@ function CourseCard({
 
   return (
     <motion.div
+      role="button"
+      tabIndex={0}
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.025, duration: 0.2 }}
       onClick={onClick}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); } }}
+      aria-label={`${isSelected ? "Close" : "Play"} ${course.title}`}
+      aria-pressed={isSelected}
       className={cn(
         "group cursor-pointer rounded-2xl border overflow-hidden transition-all duration-200",
         isSelected
@@ -277,8 +281,24 @@ export default function MentorshipPage() {
     setSelectedCourse((prev) => (prev?.id === course.id ? null : course));
   };
 
-  const countByLevel = (level: Level) => courses.filter((c) => c.level === level).length;
-  const countByCategory = (cat: CourseCategory) => courses.filter((c) => c.category === cat).length;
+  const levelCounts = useMemo(
+    () => ({
+      Beginner:     courses.filter((c) => c.level === "Beginner").length,
+      Intermediate: courses.filter((c) => c.level === "Intermediate").length,
+      Advanced:     courses.filter((c) => c.level === "Advanced").length,
+    }),
+    [courses],
+  );
+
+  const categoryCounts = useMemo(
+    () => Object.fromEntries(
+      (Object.keys(CATEGORY_CONFIG) as CourseCategory[]).map((cat) => [
+        cat,
+        courses.filter((c) => c.category === cat).length,
+      ]),
+    ) as Record<CourseCategory, number>,
+    [courses],
+  );
 
   return (
     <div className="flex-1 overflow-auto bg-[#080f1e]">
@@ -334,7 +354,7 @@ export default function MentorshipPage() {
                   className="w-full bg-white/5 border border-white/8 rounded-xl pl-9 pr-4 py-2.5 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-all"
                 />
                 {search && (
-                  <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2">
+                  <button onClick={() => setSearch("")} aria-label="Clear search" className="absolute right-3 top-1/2 -translate-y-1/2">
                     <X className="w-4 h-4 text-slate-500 hover:text-white transition-colors" />
                   </button>
                 )}
@@ -343,7 +363,7 @@ export default function MentorshipPage() {
               {/* Level tabs */}
               <div className="flex gap-1.5 mb-2 flex-wrap">
                 {ALL_LEVELS.map((lvl) => {
-                  const count = lvl === "All" ? courses.length : courses.filter((c) => c.level === lvl).length;
+                  const count = lvl === "All" ? courses.length : levelCounts[lvl as Level];
                   const dotColor = lvl === "Beginner" ? "bg-green-500" : lvl === "Intermediate" ? "bg-yellow-500" : lvl === "Advanced" ? "bg-red-500" : "bg-slate-500";
                   return (
                     <button
@@ -370,7 +390,7 @@ export default function MentorshipPage() {
                   const Icon = config?.icon;
                   const count = cat === "All"
                     ? courses.length
-                    : courses.filter((c) => c.category === cat).length;
+                    : categoryCounts[cat as CourseCategory];
                   return (
                     <button
                       key={cat}
@@ -427,23 +447,24 @@ export default function MentorshipPage() {
                       )}>
                         {selectedCourse.level}
                       </span>
-                      {(() => {
-                        const cat = CATEGORY_CONFIG[selectedCourse.category];
-                        const CatIcon = cat?.icon;
-                        return CatIcon ? (
+                      {CATEGORY_CONFIG[selectedCourse.category] && (() => {
+                        const activeCat = CATEGORY_CONFIG[selectedCourse.category];
+                        const ActiveCatIcon = activeCat.icon;
+                        return (
                           <span className={cn(
                             "inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded-full border",
-                            cat.color
+                            activeCat.color
                           )}>
-                            <CatIcon className="w-2.5 h-2.5" />
+                            <ActiveCatIcon className="w-2.5 h-2.5" />
                             {selectedCourse.category}
                           </span>
-                        ) : null;
+                        );
                       })()}
                     </div>
                   </div>
                   <button
                     onClick={() => setSelectedCourse(null)}
+                    aria-label="Close player"
                     className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg bg-white/5 hover:bg-white/10 border border-white/8 transition-colors"
                   >
                     <X className="w-4 h-4 text-slate-400" />
@@ -507,7 +528,6 @@ export default function MentorshipPage() {
             </p>
             <button
               onClick={fetchCourses}
-              disabled={loading}
               className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white font-bold px-6 py-3 rounded-xl transition-colors"
             >
               <GraduationCap className="w-4 h-4" />
@@ -555,9 +575,9 @@ export default function MentorshipPage() {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
             {[
               { label: "Total Courses",  value: courses.length,              color: "text-white" },
-              { label: "Beginner",       value: countByLevel("Beginner"),     color: "text-green-400" },
-              { label: "Intermediate",   value: countByLevel("Intermediate"), color: "text-yellow-400" },
-              { label: "Advanced",       value: countByLevel("Advanced"),     color: "text-red-400" },
+              { label: "Beginner",       value: levelCounts.Beginner,        color: "text-green-400" },
+              { label: "Intermediate",   value: levelCounts.Intermediate,    color: "text-yellow-400" },
+              { label: "Advanced",       value: levelCounts.Advanced,        color: "text-red-400" },
             ].map((s) => (
               <div key={s.label} className="bg-white/3 border border-white/6 rounded-xl p-3 text-center">
                 <div className={cn("text-2xl font-black", s.color)}>{s.value}</div>
@@ -571,7 +591,7 @@ export default function MentorshipPage() {
         {!loading && courses.length > 0 && (
           <div className="flex gap-2 flex-wrap mb-6">
             {(Object.keys(CATEGORY_CONFIG) as CourseCategory[]).map((cat) => {
-              const count = countByCategory(cat);
+              const count = categoryCounts[cat];
               if (count === 0) return null;
               const { icon: Icon, color } = CATEGORY_CONFIG[cat];
               return (
@@ -581,7 +601,7 @@ export default function MentorshipPage() {
                   className={cn(
                     "inline-flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-full border transition-all",
                     activeCategory === cat
-                      ? color.replace("bg-", "bg-") + " ring-1 ring-white/20"
+                      ? color + " ring-1 ring-white/20"
                       : color.replace(/bg-\S+/, "bg-transparent")
                   )}
                 >

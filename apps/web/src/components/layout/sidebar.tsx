@@ -41,6 +41,8 @@ interface SidebarProps {
 const ALL_ROUTES = [
   ...NAV_ITEMS.map(i => i.href),
   ...BOTTOM_ITEMS.map(i => i.href),
+  '/dashboard/tube',
+  '/dashboard/mentorship',
 ];
 
 export function Sidebar({ collapsed, onToggle }: SidebarProps) {

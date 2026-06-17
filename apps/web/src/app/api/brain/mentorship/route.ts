@@ -127,7 +127,10 @@ export async function GET() {
       category: categoryOf(item.snippet.title, item.snippet.description ?? '', queryObj.category),
     }));
 
-    return NextResponse.json({ courses, topic: queryObj.q, focusLevel: queryObj.level });
+    return NextResponse.json(
+      { courses, topic: queryObj.q, focusLevel: queryObj.level },
+      { headers: { 'Cache-Control': 's-maxage=300, stale-while-revalidate=60' } },
+    );
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : 'Failed to reach YouTube API' },
