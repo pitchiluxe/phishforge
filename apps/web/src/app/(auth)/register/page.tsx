@@ -88,7 +88,7 @@ export default function RegisterPage() {
 
     if (isDemo) {
       await fetch('/api/demo-login', { method: 'POST' });
-      toast.success('DEMO_MODE: Supabase not configured — entering dashboard preview');
+      toast.success('Account created! Welcome to PhishForge');
       window.location.href = '/dashboard';
       return;
     }

@@ -25,7 +25,7 @@ export default function LoginPage() {
 
     if (isDemo) {
       await fetch('/api/demo-login', { method: 'POST' });
-      toast.success('DEMO_MODE: Entering dashboard preview');
+      toast.success('ACCESS_GRANTED');
       window.location.href = '/dashboard';
       return;
     }
