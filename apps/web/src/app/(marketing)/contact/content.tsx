@@ -87,10 +87,10 @@ export default function ContactContent() {
               </div>
               {/* Contact info */}
               <div style={{ padding: '20px 24px' }}>
-                <a href="mailto:erickomari243@gmail.com" style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none', padding: '10px 0', borderBottom: '1px solid rgba(0,255,65,0.08)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: '1px solid rgba(0,255,65,0.08)' }}>
                   <Mail size={14} style={{ color: '#00ff41', flexShrink: 0 }} />
-                  <span style={{ fontFamily: 'var(--font-fira-code), monospace', fontSize: 12, color: 'rgba(200,255,212,0.7)' }}>erickomari243@gmail.com</span>
-                </a>
+                  <span style={{ fontFamily: 'var(--font-fira-code), monospace', fontSize: 12, color: 'rgba(200,255,212,0.7)' }}>Use the form to get in touch</span>
+                </div>
                 <div style={{ display: 'flex', gap: 12, marginTop: 16 }}>
                   {[
                     { icon: Github, href: 'https://github.com/pitchiluxe?tab=repositories', label: 'GitHub' },
@@ -129,7 +129,7 @@ export default function ContactContent() {
               </div>
             ) : (
               <form onSubmit={handleSubmit} style={{ border: '1px solid rgba(0,255,65,0.15)', borderRadius: 4, padding: '36px 32px', background: 'rgba(0,255,65,0.015)' }}>
-                <p style={{ fontFamily: 'var(--font-fira-code), monospace', fontSize: 11, color: '#00ff41', opacity: 0.4, letterSpacing: '0.15em', marginBottom: 24 }}>$ compose_message --to erickomari243@gmail.com</p>
+                <p style={{ fontFamily: 'var(--font-fira-code), monospace', fontSize: 11, color: '#00ff41', opacity: 0.4, letterSpacing: '0.15em', marginBottom: 24 }}>$ compose_message --to phishforge</p>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
                   <div>

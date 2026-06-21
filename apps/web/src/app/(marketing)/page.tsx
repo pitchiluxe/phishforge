@@ -43,10 +43,6 @@ const jsonLd = {
   name: 'PhishForge AI',
   applicationCategory: 'SecurityApplication',
   operatingSystem: 'Web',
-  offers: [
-    { '@type': 'Offer', price: '0', priceCurrency: 'USD', name: 'Free Plan' },
-    { '@type': 'Offer', price: '49', priceCurrency: 'USD', name: 'Pro Plan', billingPeriod: 'P1M' },
-  ],
   description: 'AI-powered phishing simulation platform for authorized enterprise security awareness training.',
   author: { '@type': 'Person', name: 'Erick Omari' },
   aggregateRating: { '@type': 'AggregateRating', ratingValue: '4.9', reviewCount: '312' },
@@ -91,10 +87,10 @@ export default function LandingPage() {
 
           <div style={{ display: 'flex', gap: 14, justifyContent: 'center', flexWrap: 'wrap', animation: 'fadeSlideUp 0.5s 0.2s ease both', opacity: 0 }}>
             <Link href="/register" className="cta-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontFamily: 'var(--font-fira-code), monospace', fontSize: 14, fontWeight: 700, color: '#000', background: '#00ff41', textDecoration: 'none', padding: '13px 28px', borderRadius: 2, boxShadow: '0 0 24px rgba(0,255,65,0.4)', letterSpacing: '0.05em', transition: 'box-shadow 200ms' }}>
-              <Terminal size={15} /> Start Free — No Card
+              <Terminal size={15} /> Get Started — No Card
             </Link>
-            <Link href="/pricing" className="cta-outline" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontFamily: 'var(--font-fira-code), monospace', fontSize: 14, color: '#00ff41', textDecoration: 'none', padding: '13px 28px', borderRadius: 2, border: '1px solid rgba(0,255,65,0.35)', background: 'rgba(0,255,65,0.05)', letterSpacing: '0.05em', transition: 'background 200ms' }}>
-              View Pricing <ChevronRight size={14} />
+            <Link href="/contact" className="cta-outline" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontFamily: 'var(--font-fira-code), monospace', fontSize: 14, color: '#00ff41', textDecoration: 'none', padding: '13px 28px', borderRadius: 2, border: '1px solid rgba(0,255,65,0.35)', background: 'rgba(0,255,65,0.05)', letterSpacing: '0.05em', transition: 'background 200ms' }}>
+              Talk to Sales <ChevronRight size={14} />
             </Link>
           </div>
 
@@ -181,7 +177,7 @@ export default function LandingPage() {
             Start training your team today
           </h2>
           <p style={{ fontFamily: 'var(--font-fira-sans), sans-serif', fontSize: 15, color: 'rgba(200,255,212,0.6)', marginBottom: 36, lineHeight: 1.7 }}>
-            Free plan includes 100 simulations/month. No credit card required.
+            No credit card required. Start protecting your team today.
           </p>
           <div style={{ display: 'flex', gap: 14, justifyContent: 'center', flexWrap: 'wrap' }}>
             <Link href="/register" className="cta-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontFamily: 'var(--font-fira-code), monospace', fontSize: 14, fontWeight: 700, color: '#000', background: '#00ff41', textDecoration: 'none', padding: '13px 32px', borderRadius: 2, boxShadow: '0 0 28px rgba(0,255,65,0.4)', letterSpacing: '0.05em', transition: 'box-shadow 200ms' }}>

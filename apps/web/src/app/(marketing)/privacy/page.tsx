@@ -43,7 +43,7 @@ AI vector embeddings are stored in Pinecone under a per-organization namespace. 
 • Portability: receive your data in a machine-readable format
 • Objection: opt out of processing for legitimate interest purposes
 
-To exercise these rights, email: erickomari243@gmail.com. We respond within 30 days.`,
+To exercise these rights, submit a request via the contact form at /contact. We respond within 30 days.`,
   },
   {
     title: '5. Data Retention',
@@ -68,10 +68,9 @@ A full list of sub-processors is available on request.`,
   },
   {
     title: '8. Contact',
-    body: `Data controller: Erick Omari, PhishForge AI
-Email: erickomari243@gmail.com
+    body: `Data controller: PhishForge AI
 
-For DPA (Data Processing Agreement) requests, please use the same email with subject line "DPA Request".`,
+For DPA (Data Processing Agreement) requests, use the contact form at /contact with subject "DPA Request".`,
   },
 ];
 

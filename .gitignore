@@ -45,3 +45,5 @@ pnpm-debug.log*
 
 # Docker
 docker-compose.override.yml
+
+.vercel

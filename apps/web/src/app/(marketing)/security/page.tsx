@@ -67,7 +67,7 @@ const PRACTICES = [
     icon: AlertTriangle,
     title: 'Vulnerability Disclosure',
     items: [
-      'Responsible disclosure: erickomari243@gmail.com',
+      'Responsible disclosure: use the contact form at /contact',
       'PGP key available on request',
       'We acknowledge reports within 48 hours',
       'We commit to fixing critical issues within 7 days',
@@ -122,7 +122,7 @@ export default function SecurityPage() {
           <p style={{ fontFamily: 'var(--font-fira-sans), sans-serif', fontSize: 14, color: 'rgba(200,255,212,0.6)', marginBottom: 20 }}>
             Please disclose responsibly. We take all security reports seriously and respond within 48 hours.
           </p>
-          <a href="mailto:erickomari243@gmail.com?subject=Security%20Vulnerability%20Report" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontFamily: 'var(--font-fira-code), monospace', fontSize: 13, fontWeight: 700, color: '#000', background: '#00ff41', textDecoration: 'none', padding: '11px 24px', borderRadius: 2, boxShadow: '0 0 16px rgba(0,255,65,0.3)', letterSpacing: '0.05em' }}>
+          <a href="/contact" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontFamily: 'var(--font-fira-code), monospace', fontSize: 13, fontWeight: 700, color: '#000', background: '#00ff41', textDecoration: 'none', padding: '11px 24px', borderRadius: 2, boxShadow: '0 0 16px rgba(0,255,65,0.3)', letterSpacing: '0.05em' }}>
             <AlertTriangle size={13} /> Report a Vulnerability
           </a>
         </div>

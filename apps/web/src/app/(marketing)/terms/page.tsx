@@ -56,7 +56,7 @@ Our total liability shall not exceed the amount paid by you in the 12 months pre
   },
   {
     title: '9. Contact',
-    body: `For questions about these Terms, contact us at: erickomari243@gmail.com`,
+    body: `For questions about these Terms, please use the contact form at phishforge-ai.vercel.app/contact`,
   },
 ];
 

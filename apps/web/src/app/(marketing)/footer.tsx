@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { Shield } from 'lucide-react';
 
 const FOOTER_SECTIONS = [
-  { label: 'Product', links: [['Pricing', '/pricing'], ['Docs', '/docs'], ['Contact', '/contact']] },
+  { label: 'Product', links: [['Docs', '/docs'], ['Contact', '/contact']] },
   { label: 'Legal', links: [['Terms', '/terms'], ['Privacy', '/privacy'], ['Security', '/security']] },
   { label: 'Account', links: [['Login', '/login'], ['Register', '/register']] },
 ] as const;
@@ -39,7 +39,7 @@ export function MarketingFooter() {
         </div>
       </div>
       <div style={{ maxWidth: 1200, margin: '32px auto 0', borderTop: '1px solid rgba(0,255,65,0.08)', paddingTop: 20, fontFamily: 'var(--font-fira-code), monospace', fontSize: 10, color: '#00ff41', opacity: 0.3 }}>
-        © {new Date().getFullYear()} PhishForge AI — For authorized security training only.
+        © {new Date().getFullYear()} PhishForge AI — Built by Erick OMARI — For authorized security training only.
       </div>
     </footer>
   );

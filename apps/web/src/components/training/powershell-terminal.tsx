@@ -5,11 +5,15 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Terminal, Loader2, RotateCcw, Search, Network, Shield,
   Database, Bug, FileSearch, Server, ChevronRight, Lightbulb,
-  BookOpen, Copy, Check,
+  BookOpen, Copy, Check, Sparkles, RefreshCw,
+  AlertTriangle, Target, Cpu, Activity, Eye, Globe, HardDrive,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { addTokenUsage } from '@/hooks/use-ai-usage';
 
 const MONO = { fontFamily: 'var(--font-fira-code), monospace' } as const;
+
+// ─── Types ─────────────────────────────────────────────────────────────────────
 
 interface TermEntry {
   type: 'prompt' | 'output' | 'error' | 'lesson' | 'system';
@@ -26,7 +30,39 @@ interface PSScenario {
   context: string;
   hints: string[];
   starterCommands: string[];
+  category?: string;
+  difficulty?: string;
+  isAI?: boolean;
 }
+
+// ─── Icon map for AI-generated scenarios ──────────────────────────────────────
+
+const CATEGORY_ICON: Record<string, React.ElementType> = {
+  'Active Directory':   Database,
+  'Credential Theft':   Eye,
+  'Threat Hunting':     Search,
+  'Persistence':        Server,
+  'Defense Evasion':    Shield,
+  'C2 Detection':       Globe,
+  'Lateral Movement':   Network,
+  'Network Security':   Network,
+  'Ransomware':         Bug,
+  'Endpoint Hardening': HardDrive,
+  'Identity Security':  Database,
+  'Cloud Security':     Globe,
+  'Incident Response':  AlertTriangle,
+  'Forensics':          FileSearch,
+  'Compliance Audit':   Target,
+  'SOC Operations':     Activity,
+  'Malware Analysis':   Bug,
+};
+
+function iconFor(category?: string): React.ElementType {
+  if (!category) return Terminal;
+  return CATEGORY_ICON[category] ?? Cpu;
+}
+
+// ─── Hardcoded scenarios ───────────────────────────────────────────────────────
 
 const SCENARIOS: PSScenario[] = [
   {
@@ -100,6 +136,8 @@ const CMD_SUGGESTIONS: Record<string, string[]> = {
   'defense-hardening': ['Set-ExecutionPolicy RemoteSigned -Scope LocalMachine', 'Enable-WindowsOptionalFeature -Online -FeatureName MicrosoftWindowsPowerShell', 'Set-ItemProperty "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\PowerShell\\ScriptBlockLogging" -Name EnableScriptBlockLogging -Value 1', '$ExecutionContext.SessionState.LanguageMode'],
 };
 
+// ─── Copy button ───────────────────────────────────────────────────────────────
+
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
   return (
@@ -113,6 +151,8 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
+// ─── Main component ────────────────────────────────────────────────────────────
+
 export function PowerShellTerminal() {
   const [scenario, setScenario] = useState<PSScenario | null>(null);
   const [entries, setEntries] = useState<TermEntry[]>([]);
@@ -121,12 +161,54 @@ export function PowerShellTerminal() {
   const [history, setHistory] = useState<{ role: string; content: string }[]>([]);
   const [cmdHistory, setCmdHistory] = useState<string[]>([]);
   const [historyIdx, setHistoryIdx] = useState(-1);
+  const [aiScenarios, setAiScenarios] = useState<PSScenario[]>([]);
+  const [generating, setGenerating] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [entries, loading]);
+
+  async function generateAIScenarios() {
+    setGenerating(true);
+    try {
+      const res = await fetch('/api/powershell/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ count: 10 }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Generation failed');
+
+      const normalized: PSScenario[] = (data.scenarios ?? []).map((s: any) => ({
+        id: s.id ?? `ai-ps-${Date.now()}-${Math.random()}`,
+        title: s.title,
+        icon: iconFor(s.category),
+        color: s.color ?? '#818cf8',
+        objective: s.objective,
+        context: s.context,
+        hints: s.hints ?? [],
+        starterCommands: s.starterCommands ?? [],
+        category: s.category,
+        difficulty: s.difficulty,
+        isAI: true,
+      }));
+
+      setAiScenarios(normalized);
+      addTokenUsage('training', 1200);
+
+      toast.success(`Generated ${normalized.length} AI scenarios`, {
+        style: { background: '#0a0a0a', color: '#00ff41', border: '1px solid rgba(0,255,65,0.2)' },
+      });
+    } catch (e: any) {
+      toast.error(e.message ?? 'Failed to generate scenarios', {
+        style: { background: '#0a0a0a', color: '#f87171' },
+      });
+    } finally {
+      setGenerating(false);
+    }
+  }
 
   function selectScenario(s: PSScenario) {
     setScenario(s);
@@ -145,7 +227,6 @@ export function PowerShellTerminal() {
     setInput('');
     setHistoryIdx(-1);
     setCmdHistory(prev => [command, ...prev.slice(0, 49)]);
-
     setEntries(prev => [...prev, { type: 'prompt', content: command, command }]);
     setLoading(true);
 
@@ -173,6 +254,7 @@ export function PowerShellTerminal() {
         { role: 'user', content: `PS C:\\Users\\SecAnalyst> ${command}` },
         { role: 'assistant', content: `<output>${data.output}</output><lesson>${data.lesson}</lesson>` },
       ]);
+      addTokenUsage('training', 600);
     } catch (e: any) {
       setEntries(prev => [...prev, { type: 'error', content: `Error: ${e.message}` }]);
       toast.error(e.message);
@@ -208,7 +290,9 @@ export function PowerShellTerminal() {
         {/* ── Scenario selector ── */}
         {!scenario && (
           <motion.div key="select" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+              {/* Info banner */}
               <div style={{ padding: '14px 18px', background: 'rgba(96,165,250,0.05)', border: '1px solid rgba(96,165,250,0.2)', borderRadius: 10, display: 'flex', alignItems: 'center', gap: 10 }}>
                 <Terminal size={16} style={{ color: '#60a5fa' }} />
                 <div>
@@ -217,50 +301,159 @@ export function PowerShellTerminal() {
                 </div>
               </div>
 
-              <div style={{ ...MONO, fontSize: 9, color: '#00ff41', opacity: 0.4, textTransform: 'uppercase', letterSpacing: '0.12em' }}>// Choose a Training Scenario</div>
+              {/* ── AI Generator ── */}
+              <div style={{ padding: '18px 20px', background: 'rgba(129,140,248,0.04)', border: '1px solid rgba(129,140,248,0.2)', borderRadius: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                      <Sparkles size={14} style={{ color: '#818cf8' }} />
+                      <span style={{ ...MONO, fontSize: 13, fontWeight: 700, color: '#818cf8' }}>AI Scenario Generator</span>
+                      <span style={{ ...MONO, fontSize: 8, fontWeight: 700, color: '#818cf8', background: 'rgba(129,140,248,0.12)', border: '1px solid rgba(129,140,248,0.25)', borderRadius: 3, padding: '1px 6px', letterSpacing: '0.06em' }}>
+                        10 SCENARIOS / GENERATION
+                      </span>
+                    </div>
+                    <p style={{ ...MONO, fontSize: 10, color: '#64748b', margin: 0, lineHeight: 1.55 }}>
+                      Generate fresh, randomized PowerShell security scenarios on the fly — new threat categories, objectives, and commands every time.
+                    </p>
+                  </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
-                {SCENARIOS.map(s => {
-                  const Icon = s.icon;
-                  return (
-                    <button
-                      key={s.id}
-                      onClick={() => selectScenario(s)}
-                      style={{ padding: '16px', background: 'rgba(0,255,65,0.02)', border: `1px solid ${s.color}20`, borderRadius: 9, cursor: 'pointer', textAlign: 'left', transition: 'all 150ms' }}
-                      onMouseEnter={e => { e.currentTarget.style.background = `${s.color}08`; e.currentTarget.style.borderColor = `${s.color}40`; e.currentTarget.style.boxShadow = `0 0 14px ${s.color}15`; }}
-                      onMouseLeave={e => { e.currentTarget.style.background = 'rgba(0,255,65,0.02)'; e.currentTarget.style.borderColor = `${s.color}20`; e.currentTarget.style.boxShadow = 'none'; }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                        <Icon size={14} style={{ color: s.color }} />
-                        <span style={{ ...MONO, fontSize: 11, fontWeight: 700, color: s.color }}>{s.title}</span>
-                      </div>
-                      <div style={{ ...MONO, fontSize: 10, color: '#94a3b8', lineHeight: 1.55 }}>{s.objective}</div>
-                      <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 5, ...MONO, fontSize: 9, color: '#00ff41', opacity: 0.4 }}>
-                        <ChevronRight size={9} />Launch Terminal
-                      </div>
-                    </button>
-                  );
-                })}
+                  <button
+                    onClick={generateAIScenarios}
+                    disabled={generating}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 7,
+                      padding: '9px 18px', borderRadius: 7, cursor: generating ? 'not-allowed' : 'pointer',
+                      ...MONO, fontSize: 11, fontWeight: 700, letterSpacing: '0.03em',
+                      background: 'rgba(129,140,248,0.15)',
+                      border: '1px solid rgba(129,140,248,0.4)',
+                      color: '#818cf8',
+                      boxShadow: '0 0 16px rgba(129,140,248,0.15)',
+                      transition: 'all 150ms',
+                      flexShrink: 0,
+                    }}
+                  >
+                    {generating ? (
+                      <><Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} />Generating 10 scenarios…</>
+                    ) : (
+                      <><Sparkles size={13} />{aiScenarios.length > 0 ? 'Regenerate 10 Scenarios' : 'Generate 10 Scenarios'}</>
+                    )}
+                  </button>
+                </div>
+
+                {/* Loading skeleton */}
+                {generating && (
+                  <div style={{ marginTop: 16, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 8 }}>
+                    {Array.from({ length: 6 }).map((_, i) => (
+                      <div key={i} style={{ height: 90, borderRadius: 8, background: 'rgba(129,140,248,0.05)', border: '1px solid rgba(129,140,248,0.1)', animation: 'pulse 1.5s ease-in-out infinite' }} />
+                    ))}
+                  </div>
+                )}
+
+                {/* AI scenario cards */}
+                {!generating && aiScenarios.length > 0 && (
+                  <div style={{ marginTop: 16 }}>
+                    <div style={{ ...MONO, fontSize: 9, color: '#818cf8', opacity: 0.5, textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 10 }}>
+                      // AI-generated — {aiScenarios.length} scenarios ready
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 10 }}>
+                      {aiScenarios.map((s, idx) => {
+                        const Icon = s.icon;
+                        return (
+                          <motion.button
+                            key={s.id}
+                            initial={{ opacity: 0, y: 6 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: idx * 0.04 }}
+                            onClick={() => selectScenario(s)}
+                            style={{ padding: '14px', background: `${s.color}06`, border: `1px solid ${s.color}25`, borderRadius: 8, cursor: 'pointer', textAlign: 'left', transition: 'all 150ms' }}
+                            onMouseEnter={e => { e.currentTarget.style.background = `${s.color}10`; e.currentTarget.style.borderColor = `${s.color}45`; e.currentTarget.style.boxShadow = `0 0 12px ${s.color}12`; }}
+                            onMouseLeave={e => { e.currentTarget.style.background = `${s.color}06`; e.currentTarget.style.borderColor = `${s.color}25`; e.currentTarget.style.boxShadow = 'none'; }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 6 }}>
+                              <Icon size={12} style={{ color: s.color, flexShrink: 0 }} />
+                              <span style={{ ...MONO, fontSize: 10, fontWeight: 700, color: s.color, lineHeight: 1.35 }}>{s.title}</span>
+                              <span style={{ marginLeft: 'auto', flexShrink: 0, ...MONO, fontSize: 7, fontWeight: 700, color: '#818cf8', background: 'rgba(129,140,248,0.1)', border: '1px solid rgba(129,140,248,0.2)', borderRadius: 3, padding: '1px 4px' }}>AI</span>
+                            </div>
+                            {s.category && (
+                              <div style={{ ...MONO, fontSize: 8, color: '#475569', marginBottom: 4 }}>
+                                {s.category} · {s.difficulty}
+                              </div>
+                            )}
+                            <div style={{ ...MONO, fontSize: 9, color: '#94a3b8', lineHeight: 1.5 }}>{s.objective}</div>
+                            <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 4, ...MONO, fontSize: 8, color: s.color, opacity: 0.45 }}>
+                              <ChevronRight size={8} />Launch Terminal
+                            </div>
+                          </motion.button>
+                        );
+                      })}
+                    </div>
+
+                    <div style={{ marginTop: 12 }}>
+                      <button
+                        onClick={generateAIScenarios}
+                        disabled={generating}
+                        style={{ display: 'flex', alignItems: 'center', gap: 5, ...MONO, fontSize: 9, color: 'rgba(129,140,248,0.5)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                      >
+                        <RefreshCw size={9} />Regenerate for different scenarios
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* ── Hardcoded scenarios ── */}
+              <div>
+                <div style={{ ...MONO, fontSize: 9, color: '#00ff41', opacity: 0.4, textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 12 }}>
+                  // Core Training Scenarios ({SCENARIOS.length} included)
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
+                  {SCENARIOS.map(s => {
+                    const Icon = s.icon;
+                    return (
+                      <button
+                        key={s.id}
+                        onClick={() => selectScenario(s)}
+                        style={{ padding: '16px', background: 'rgba(0,255,65,0.02)', border: `1px solid ${s.color}20`, borderRadius: 9, cursor: 'pointer', textAlign: 'left', transition: 'all 150ms' }}
+                        onMouseEnter={e => { e.currentTarget.style.background = `${s.color}08`; e.currentTarget.style.borderColor = `${s.color}40`; e.currentTarget.style.boxShadow = `0 0 14px ${s.color}15`; }}
+                        onMouseLeave={e => { e.currentTarget.style.background = 'rgba(0,255,65,0.02)'; e.currentTarget.style.borderColor = `${s.color}20`; e.currentTarget.style.boxShadow = 'none'; }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                          <Icon size={14} style={{ color: s.color }} />
+                          <span style={{ ...MONO, fontSize: 11, fontWeight: 700, color: s.color }}>{s.title}</span>
+                        </div>
+                        <div style={{ ...MONO, fontSize: 10, color: '#94a3b8', lineHeight: 1.55 }}>{s.objective}</div>
+                        <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 5, ...MONO, fontSize: 9, color: '#00ff41', opacity: 0.4 }}>
+                          <ChevronRight size={9} />Launch Terminal
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           </motion.div>
         )}
 
-        {/* ── Terminal ── */}
+        {/* ── Active terminal ── */}
         {scenario && (
           <motion.div key="terminal" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
             <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
 
               {/* Main terminal panel */}
               <div style={{ flex: 1, minWidth: 0 }}>
-                {/* Terminal header bar */}
+                {/* Title bar */}
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 14px', background: '#1a1a2e', borderRadius: '8px 8px 0 0', border: '1px solid rgba(96,165,250,0.2)', borderBottom: 'none' }}>
                   <div style={{ display: 'flex', gap: 6 }}>
                     <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#f87171' }} />
                     <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#facc15' }} />
                     <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#00ff41' }} />
                   </div>
-                  <span style={{ ...MONO, fontSize: 10, color: '#60a5fa', opacity: 0.7 }}>Windows PowerShell — {scenario.title}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {scenario.isAI && (
+                      <span style={{ ...MONO, fontSize: 7, fontWeight: 700, color: '#818cf8', background: 'rgba(129,140,248,0.1)', border: '1px solid rgba(129,140,248,0.2)', borderRadius: 3, padding: '1px 5px' }}>AI</span>
+                    )}
+                    <span style={{ ...MONO, fontSize: 10, color: '#60a5fa', opacity: 0.7 }}>Windows PowerShell — {scenario.title}</span>
+                  </div>
                   <button onClick={resetTerminal} style={{ ...MONO, fontSize: 9, color: '#475569', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
                     <RotateCcw size={9} /> Exit
                   </button>
@@ -307,7 +500,6 @@ export function PowerShellTerminal() {
                     </div>
                   )}
 
-                  {/* Active input line */}
                   <div style={{ display: 'flex', alignItems: 'center', marginTop: 8 }}>
                     <span style={{ ...MONO, fontSize: 11, color: '#60a5fa', whiteSpace: 'nowrap' }}>PS C:\Users\SecAnalyst{'>'} </span>
                     <input
@@ -359,10 +551,10 @@ export function PowerShellTerminal() {
                         key={i}
                         onClick={() => runCommand(cmd)}
                         disabled={loading}
+                        title={cmd}
                         style={{ ...MONO, fontSize: 9, color: '#60a5fa', background: 'rgba(96,165,250,0.05)', border: '1px solid rgba(96,165,250,0.15)', borderRadius: 4, padding: '5px 8px', cursor: 'pointer', textAlign: 'left', lineHeight: 1.4, transition: 'all 150ms', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
                         onMouseEnter={e => { e.currentTarget.style.background = 'rgba(96,165,250,0.12)'; e.currentTarget.style.borderColor = 'rgba(96,165,250,0.3)'; }}
                         onMouseLeave={e => { e.currentTarget.style.background = 'rgba(96,165,250,0.05)'; e.currentTarget.style.borderColor = 'rgba(96,165,250,0.15)'; }}
-                        title={cmd}
                       >
                         {cmd.length > 38 ? cmd.slice(0, 38) + '…' : cmd}
                       </button>
@@ -370,7 +562,7 @@ export function PowerShellTerminal() {
                   </div>
                 </div>
 
-                {/* Extra commands */}
+                {/* Extra commands (hardcoded only) */}
                 {CMD_SUGGESTIONS[scenario.id]?.length > 0 && (
                   <div style={{ padding: '12px 14px', background: 'rgba(0,255,65,0.02)', border: '1px solid rgba(0,255,65,0.1)', borderRadius: 8 }}>
                     <div style={{ ...MONO, fontSize: 9, color: '#00ff41', opacity: 0.4, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>More Commands</div>
@@ -380,10 +572,10 @@ export function PowerShellTerminal() {
                           key={i}
                           onClick={() => { setInput(cmd); inputRef.current?.focus(); }}
                           disabled={loading}
+                          title={`Insert: ${cmd}`}
                           style={{ ...MONO, fontSize: 9, color: 'rgba(0,255,65,0.5)', background: 'none', border: '1px solid rgba(0,255,65,0.08)', borderRadius: 4, padding: '4px 8px', cursor: 'pointer', textAlign: 'left', lineHeight: 1.4, transition: 'all 150ms', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
                           onMouseEnter={e => { e.currentTarget.style.color = '#00ff41'; e.currentTarget.style.borderColor = 'rgba(0,255,65,0.2)'; }}
                           onMouseLeave={e => { e.currentTarget.style.color = 'rgba(0,255,65,0.5)'; e.currentTarget.style.borderColor = 'rgba(0,255,65,0.08)'; }}
-                          title={`Insert: ${cmd}`}
                         >
                           {cmd.length > 38 ? cmd.slice(0, 38) + '…' : cmd}
                         </button>

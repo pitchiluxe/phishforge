@@ -1,5 +1,3 @@
-import Link from 'next/link';
-
 interface UsageBarProps {
   used: number;
   limit: number;
@@ -86,28 +84,14 @@ export function UsageBar({ used, limit, plan }: UsageBarProps) {
       </div>
 
       {isNearLimit && (
-        <div style={{
-          marginTop: 8,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-        }}>
+        <div style={{ marginTop: 8 }}>
           <span style={{
             fontFamily: 'var(--font-fira-code), monospace',
             fontSize: 10,
             color: isAtLimit ? '#ff4444' : '#ffaa00',
           }}>
-            {isAtLimit ? 'LIMIT_REACHED — upgrade to continue' : `${100 - pct}% remaining`}
+            {isAtLimit ? 'LIMIT_REACHED' : `${100 - pct}% remaining`}
           </span>
-          <Link href="/dashboard/settings/billing" style={{
-            fontFamily: 'var(--font-fira-code), monospace',
-            fontSize: 10,
-            color: '#00ff41',
-            textDecoration: 'none',
-            opacity: 0.75,
-          }}>
-            upgrade →
-          </Link>
         </div>
       )}
     </div>

@@ -7,7 +7,6 @@ import { useState } from 'react';
 import { OnlineCounter } from '@/components/online-counter';
 
 const NAV_LINKS = [
-  { href: '/pricing', label: 'Pricing' },
   { href: '/docs', label: 'Docs' },
   { href: '/contact', label: 'Contact' },
 ];
