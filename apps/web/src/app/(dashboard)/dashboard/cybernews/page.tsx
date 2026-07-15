@@ -4,8 +4,23 @@ import { useState, useEffect, useCallback } from 'react';
 import { Header } from '@/components/layout/header';
 import {
   Newspaper, RefreshCw, X, BrainCircuit, AlertTriangle, Shield,
-  Clock, Tag, Loader2, ChevronRight, Zap,
+  Clock, Tag, Loader2, ChevronRight, Zap, Sparkles,
 } from 'lucide-react';
+
+// Small badge marking AI-generated content so it's clear the AI produced it.
+function AIBadge() {
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 3,
+      fontFamily: 'var(--font-fira-code), monospace', fontSize: 8, fontWeight: 700,
+      letterSpacing: '0.08em', color: '#a78bfa',
+      background: 'rgba(167,139,250,0.14)', border: '1px solid rgba(167,139,250,0.35)',
+      borderRadius: 3, padding: '1px 5px',
+    }}>
+      <Sparkles size={7} /> AI
+    </span>
+  );
+}
 import { useDashboard } from '@/components/layout/dashboard-context';
 
 const MONO = { fontFamily: 'var(--font-fira-code), monospace' } as const;
@@ -69,6 +84,7 @@ export default function CyberNewsPage() {
   const [activeFilter, setActiveFilter] = useState('All');
   const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
   const [model, setModel] = useState('');
+  const [fromAI, setFromAI] = useState(false);
   const { toggleBrain } = useDashboard();
 
   const generate = useCallback(async (cat?: string) => {
@@ -83,6 +99,8 @@ export default function CyberNewsPage() {
       if (!res.ok) throw new Error(data.error);
       setNews(data.news ?? []);
       setModel(data.model ?? '');
+      // Genuinely AI-generated (not the curated fallback served on provider failure).
+      setFromAI(!data.fallback && !!data.model && data.model !== 'curated-fallback');
     } catch {
       // keep existing
     } finally {
@@ -195,12 +213,12 @@ export default function CyberNewsPage() {
             gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
             gap: 14,
           }}>
-            {(loading ? news : filtered).map(item => {
+            {(loading ? news : filtered).map((item, i) => {
               const cc = catColor(item.category);
               const sev = SEVERITY_CFG[item.severity] ?? SEVERITY_CFG.medium;
               return (
                 <button
-                  key={item.id}
+                  key={`${item.id ?? 'news'}-${i}`}
                   onClick={() => setActiveCard(item)}
                   style={{
                     display: 'flex', flexDirection: 'column', gap: 0,
@@ -210,7 +228,6 @@ export default function CyberNewsPage() {
                     borderTop: `2px solid ${cc}`,
                     borderRadius: 10, cursor: 'pointer',
                     textAlign: 'left', transition: 'all 180ms',
-                    aspectRatio: '1 / 1',
                   }}
                   onMouseEnter={e => {
                     e.currentTarget.style.background = 'rgba(0,255,65,0.05)';
@@ -226,22 +243,25 @@ export default function CyberNewsPage() {
                   }}
                 >
                   {/* Card body */}
-                  <div style={{ flex: 1, padding: '16px 16px 12px', display: 'flex', flexDirection: 'column', gap: 10, minHeight: 0 }}>
-                    {/* Category + severity row */}
+                  <div style={{ padding: '12px 14px 10px', display: 'flex', flexDirection: 'column', gap: 7 }}>
+                    {/* Category + AI + severity row */}
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
-                      <span style={{ ...MONO, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: cc }}>
-                        {item.category}
-                      </span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                        <span style={{ ...MONO, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: cc, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {item.category}
+                        </span>
+                        {fromAI && <AIBadge />}
+                      </div>
                       <SeverityBadge s={item.severity} />
                     </div>
 
                     {/* Title */}
-                    <div style={{ ...MONO, fontSize: 13, fontWeight: 700, color: '#e2e8f0', lineHeight: 1.45, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical' as const }}>
+                    <div style={{ ...MONO, fontSize: 12.5, fontWeight: 700, color: '#e2e8f0', lineHeight: 1.4, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const }}>
                       {item.title}
                     </div>
 
                     {/* TL;DR */}
-                    <div style={{ ...MONO, fontSize: 10, color: '#00ff41', opacity: 0.55, lineHeight: 1.6, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical' as const, flex: 1 }}>
+                    <div style={{ ...MONO, fontSize: 10, color: '#00ff41', opacity: 0.55, lineHeight: 1.55, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const }}>
                       {item.tldr}
                     </div>
                   </div>
@@ -309,6 +329,7 @@ export default function CyberNewsPage() {
                       <span style={{ ...MONO, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: catColor(activeCard.category) }}>
                         {activeCard.category}
                       </span>
+                      {fromAI && <AIBadge />}
                       <SeverityBadge s={activeCard.severity} />
                       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                         <Clock size={9} style={{ color: '#475569' }} />
@@ -343,12 +364,14 @@ export default function CyberNewsPage() {
               {/* Article content — scrollable */}
               <div style={{ flex: 1, overflowY: 'auto', padding: '18px 22px' }}>
                 {/* Summary */}
-                <p style={{ fontFamily: 'var(--font-fira-sans, sans-serif)', fontSize: 13, color: '#94a3b8', lineHeight: 1.75, marginBottom: 16, fontWeight: 500 }}>
-                  {activeCard.summary}
-                </p>
+                {activeCard.summary && (
+                  <p style={{ fontFamily: 'var(--font-fira-sans, sans-serif)', fontSize: 13, color: '#94a3b8', lineHeight: 1.75, marginBottom: 16, fontWeight: 500 }}>
+                    {activeCard.summary}
+                  </p>
+                )}
 
                 {/* Full content */}
-                {activeCard.content.split('\n\n').map((para, i) => (
+                {(activeCard.content ?? activeCard.summary ?? '').split('\n\n').map((para, i) => (
                   <p key={i} style={{ fontFamily: 'var(--font-fira-sans, sans-serif)', fontSize: 13, color: '#64748b', lineHeight: 1.8, marginBottom: 14 }}>
                     {para}
                   </p>

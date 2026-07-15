@@ -87,6 +87,31 @@ const FALLBACK_SEEDS: Omit<NewsItem, 'id' | 'date'>[] = [
   },
 ];
 
+const VALID_SEVERITY = ['critical', 'high', 'medium', 'low'];
+
+// Coerce a possibly-incomplete AI item into a fully-populated NewsItem so the UI
+// never reads an undefined field (title/content/tags/etc.).
+function normalizeItem(raw: unknown, i: number): NewsItem {
+  const o = (raw ?? {}) as Record<string, unknown>;
+  const str = (v: unknown, fallback = '') => (typeof v === 'string' && v.trim() ? v : fallback);
+  const title = str(o.title, 'Untitled cybersecurity update');
+  const summary = str(o.summary, str(o.tldr, title));
+  const content = str(o.content, summary);
+  const sev = String(o.severity ?? '').toLowerCase();
+  return {
+    id: str(o.id, `news-${Date.now()}-${i}`),
+    title,
+    summary,
+    category: str(o.category, 'Vulnerability'),
+    severity: VALID_SEVERITY.includes(sev) ? sev : 'medium',
+    date: str(o.date, new Date().toISOString()),
+    content,
+    tags: Array.isArray(o.tags) ? o.tags.filter((t) => typeof t === 'string') as string[] : [],
+    source: str(o.source, 'CyberWatch'),
+    tldr: str(o.tldr, summary),
+  };
+}
+
 function fallbackNews(cats: string[], count: number): NewsItem[] {
   const now = Date.now();
   const pool = FALLBACK_SEEDS.filter((s) => cats.includes(s.category));
@@ -141,14 +166,20 @@ Requirements:
 
     const parsed = parseAIJson<unknown>(result.content);
     // Accept either a bare array or an object wrapping the array.
-    const news = Array.isArray(parsed)
+    const rawNews = Array.isArray(parsed)
       ? parsed
       : ((parsed as { news?: unknown[]; articles?: unknown[] })?.news
         ?? (parsed as { articles?: unknown[] })?.articles
         ?? []);
-    if (!Array.isArray(news) || news.length === 0) {
+    if (!Array.isArray(rawNews) || rawNews.length === 0) {
       throw new Error('AI returned no articles');
     }
+    // Normalise every item so the UI never hits an undefined field, then drop
+    // placeholder-only items (model returned empty title AND content).
+    const news = rawNews.map(normalizeItem).filter(
+      (n) => n.title !== 'Untitled cybersecurity update' || n.content.length > 40,
+    );
+    if (news.length < 3) throw new Error('AI output too sparse');
     return NextResponse.json({ news, model: result.model, generatedAt: new Date().toISOString() });
   } catch {
     // Never leave the feed empty — serve the curated fallback so the tab always works.

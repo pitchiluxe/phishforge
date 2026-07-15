@@ -3,7 +3,7 @@
 import { useState, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  MonitorPlay, Play, X, RotateCcw, Loader2, Search, ChevronRight, Server, Box, Terminal, FlaskConical,
+  MonitorPlay, Play, X, RotateCcw, Loader2, Search, ChevronRight, Server, Box, Terminal, FlaskConical, Sparkles,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import toast from 'react-hot-toast';
@@ -93,6 +93,9 @@ function VideoCard({ video, isSelected, onClick, index }: {
           </span>
           <span className={cn('text-[9px] font-bold px-1.5 py-0.5 rounded-full border', LEVEL_COLOR[video.difficulty])}>
             {video.difficulty}
+          </span>
+          <span className="inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded-full border text-violet-300 bg-violet-500/15 border-violet-500/35" title="AI-curated pick">
+            <Sparkles className="w-2.5 h-2.5" /> AI
           </span>
         </div>
       </div>

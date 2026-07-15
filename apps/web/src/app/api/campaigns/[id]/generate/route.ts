@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { createServerClient } from '@/lib/supabase/server';
-import { callOpenRouter, stripThinkTags } from '@/lib/ai/openrouter';
+import { callAI, stripThinkTags } from '@/lib/ai/openrouter';
 import { parseAIJson } from '@/lib/ai/json';
 
 // Last-resort recovery when the model produced JSON we still can't parse (usually
@@ -84,41 +84,22 @@ ${body.context ? `Context: ${body.context}` : ''}`;
   let content = '';
 
   try {
-    if (provider === 'ollama') {
-      const ollamaUrl = process.env.OLLAMA_BASE_URL ?? 'http://localhost:11434';
-      let res: Response;
-      try {
-        res = await fetch(`${ollamaUrl}/api/generate`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model: primaryModel ?? 'llama3.2',
-            prompt: `<system>${systemPrompt}</system>\n\n${userPrompt}`,
-            stream: false,
-            options: { temperature: 0.7, num_predict: 2500 },
-          }),
-          signal: AbortSignal.timeout(120_000),
-        });
-      } catch (e: any) {
-        throw new Error(`Ollama is not reachable at ${ollamaUrl}. Start Ollama with: ollama serve`);
-      }
-      if (res.status === 404) throw new Error(`Ollama model "${primaryModel}" not found. Pull it with: ollama pull ${primaryModel}`);
-      if (!res.ok) {
-        const txt = await res.text().catch(() => '');
-        throw new Error(`Ollama error ${res.status}${txt ? ': ' + txt.slice(0, 200) : ''}`);
-      }
-      const data = await res.json();
-      content = data.response;
-    } else {
-      const result = await callOpenRouter(
-        [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
-        ],
-        { maxTokens: 2500, temperature: 0.7, primaryModel },
-      );
-      content = stripThinkTags(result.content);
-    }
+    // Resilient: prefer the requested provider, but callAI waterfalls across local
+    // Ollama and the free OpenRouter models so a single rate-limited/unavailable
+    // provider doesn't fail the whole generation.
+    const result = await callAI(
+      [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
+      {
+        maxTokens: 2500,
+        temperature: 0.7,
+        primaryModel,
+        preferProvider: (provider as 'ollama' | 'openrouter' | 'auto') ?? 'auto',
+      },
+    );
+    content = stripThinkTags(result.content);
 
     const latency_ms = Date.now() - startTime;
 
@@ -129,7 +110,16 @@ ${body.context ? `Context: ${body.context}` : ''}`;
       parsed = extractFields(content);
     }
     if (!parsed || (!parsed.subject && !parsed.body_html && !parsed.body_text)) {
-      return NextResponse.json({ error: 'AI returned invalid JSON. Try again.' }, { status: 422 });
+      // Distinguish a model refusal / empty reply from malformed JSON so the user
+      // knows to switch models rather than just retry the same one.
+      const trimmed = (content ?? '').trim();
+      const refused = /\b(can'?t|cannot|won'?t|unable to|not able to|i'?m sorry|i am sorry|i can'?t help)\b/i.test(trimmed) && trimmed.length < 400;
+      const msg = trimmed.length === 0
+        ? 'The AI model returned an empty response. Try again or switch models in AI Models.'
+        : refused
+          ? 'The selected AI model declined to generate this training content. Switch to a more capable model in AI Models (Settings) and retry.'
+          : 'AI returned invalid JSON. Try again.';
+      return NextResponse.json({ error: msg }, { status: 422 });
     }
 
     const text = `${parsed.subject} ${parsed.body_text}`.toLowerCase();

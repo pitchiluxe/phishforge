@@ -32,14 +32,32 @@ const nextConfig: NextConfig = {
     ];
   },
   async rewrites() {
+    // This Next app implements all of its /api/* routes natively (App Router).
+    // Only proxy to the external NestJS backend when BACKEND_API_URL is explicitly
+    // set. Without this guard, a catch-all rewrite to localhost:4000 shadows the
+    // local API routes and, in production (Vercel, where no such backend exists),
+    // causes every proxied call — e.g. campaign content generation — to fail with
+    // ECONNREFUSED.
+    // Map versioned /api/v1/* calls (used by the AI Settings/Models UI) onto this
+    // app's native /api/* App Router handlers, so they work without the external
+    // NestJS backend.
+    const beforeFiles = [
+      { source: '/api/v1/:path*', destination: '/api/:path*' },
+    ];
+
+    const backend = process.env.BACKEND_API_URL?.trim();
+    if (!backend) {
+      return { beforeFiles, afterFiles: [], fallback: [] };
+    }
     return {
-      beforeFiles: [],
+      beforeFiles,
       afterFiles: [
         {
           source: '/api/:path*',
-          destination: 'http://localhost:4000/api/:path*',
+          destination: `${backend.replace(/\/$/, '')}/api/:path*`,
         },
       ],
+      fallback: [],
     };
   },
 };
