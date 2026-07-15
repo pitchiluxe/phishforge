@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { callOpenRouter, extractFinalAnswer, trimHistory } from '@/lib/ai/openrouter';
+import { callAI, extractFinalAnswer, trimHistory } from '@/lib/ai/openrouter';
 
 export interface BrainSource {
   id: string;
@@ -69,33 +69,18 @@ export async function POST(req: NextRequest) {
 
   const startMs = Date.now();
   try {
-    let content = '';
-    let tokensUsed = 0;
-    let modelUsed = '';
-
-    if (provider_ === 'ollama') {
-      const ollamaUrl = process.env.OLLAMA_BASE_URL ?? 'http://localhost:11434';
-      const res = await fetch(`${ollamaUrl}/api/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: primaryModel ?? 'llama3.2', messages: apiMessages, stream: false, options: { temperature: 0.7, num_predict: 1200 } }),
-        signal: AbortSignal.timeout(120_000),
-      });
-      if (!res.ok) throw new Error(`Ollama error ${res.status}`);
-      const data = await res.json();
-      content = extractFinalAnswer(data?.message?.content ?? '');
-      tokensUsed = (data?.prompt_eval_count ?? 0) + (data?.eval_count ?? 0);
-      modelUsed = primaryModel ?? 'llama3.2';
-    } else {
-      const result = await callOpenRouter(apiMessages, {
-        maxTokens: 1400,
-        temperature: 0.7,
-        primaryModel,
-      });
-      content = extractFinalAnswer(result.content);
-      tokensUsed = result.tokens;
-      modelUsed = result.model;
-    }
+    // Resilient: callAI prefers local Ollama (free, unlimited) and otherwise
+    // waterfalls through the free OpenRouter models, so a single rate-limited or
+    // unavailable provider never breaks the assistant.
+    const result = await callAI(apiMessages, {
+      maxTokens: 1400,
+      temperature: 0.7,
+      primaryModel,
+      preferProvider: (provider_ as 'ollama' | 'openrouter' | 'auto') ?? 'auto',
+    });
+    const content = extractFinalAnswer(result.content);
+    const tokensUsed = result.tokens;
+    const modelUsed = result.model;
 
     fetch(`${process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'}/api/usage/log`, {
       method: 'POST',
