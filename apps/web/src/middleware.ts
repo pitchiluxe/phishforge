@@ -36,9 +36,13 @@ export async function middleware(request: NextRequest) {
 
   const isRoot = path === '/';
   const isDashboard = path.startsWith('/dashboard');
+  // The password-reset link signs the user into a temporary recovery session and
+  // lands on /reset-password. Never bounce that page to the dashboard, or the user
+  // could never actually set a new password.
+  const isRecovery = path.startsWith('/reset-password');
 
-  // Redirect logged-in users away from auth pages and root
-  if (session && (isAuth || isRoot)) {
+  // Redirect logged-in users away from auth pages and root (except the reset page)
+  if (session && (isAuth || isRoot) && !isRecovery) {
     return NextResponse.redirect(new URL('/dashboard', request.url));
   }
 
