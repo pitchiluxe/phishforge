@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { callOpenRouter } from '@/lib/ai/openrouter';
+import { parseAIJson } from '@/lib/ai/json';
 
 function randomDate(daysAgo: number) {
   const d = new Date(Date.now() - Math.floor(Math.random() * daysAgo) * 86400000);
@@ -43,13 +44,11 @@ Rules:
     return NextResponse.json({ error: 'Empty response from AI' }, { status: 500 });
   }
 
-  // Strip any markdown fences the model may have added
-  const cleaned = raw.replace(/```(?:json)?\s*/gi, '').replace(/```\s*/g, '').trim();
-
   let threats: any[] = [];
   try {
-    const match = cleaned.match(/\[[\s\S]*\]/);
-    threats = JSON.parse(match?.[0] ?? cleaned);
+    const parsed = parseAIJson<unknown>(raw);
+    threats = Array.isArray(parsed) ? parsed : ((parsed as { threats?: any[] })?.threats ?? []);
+    if (threats.length === 0) throw new Error('empty');
   } catch {
     return NextResponse.json({ error: 'AI returned invalid JSON', raw: raw.slice(0, 300) }, { status: 422 });
   }

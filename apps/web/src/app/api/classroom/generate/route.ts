@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { callAI, callOpenRouter, extractFinalAnswer } from '@/lib/ai/openrouter';
+import { parseAIJson } from '@/lib/ai/json';
 
 async function getAvailableModels(): Promise<string[]> {
   try {
@@ -86,38 +87,9 @@ const LAB_TOPICS = [
 ];
 
 function extractJSON(text: string): any {
-  let cleaned = extractFinalAnswer(text);
-  
-  // Strip backticks (Ollama wraps responses in markdown: ```json ... ```)
-  cleaned = cleaned.replace(/```[\s\S]*?```/g, '');
-  cleaned = cleaned.replace(/`/g, '');
-  
-  const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) throw new Error('No JSON found in response');
-  
-  let jsonStr = jsonMatch[0];
-  
-  // Fix unescaped newlines/tabs in JSON strings (common issue from LLM outputs)
-  // This handles cases like: "description": "Line 1\nLine 2" (unescaped newline)
-  // by escaping them: "description": "Line 1\\nLine 2"
-  jsonStr = jsonStr.replace(/("[^"\\]*(?:\\.[^"\\]*)*")/g, (match) => {
-    // Inside quoted strings, escape unescaped control characters
-    return match
-      .replace(/\n/g, '\\n')     // Actual newline → \n
-      .replace(/\r/g, '\\r')     // Actual carriage return → \r
-      .replace(/\t/g, '\\t')     // Actual tab → \t
-      .replace(/\f/g, '\\f')     // Actual form feed → \f
-      .replace(/\b/g, '\\b');    // Actual backspace → \b
-  });
-  
-  try {
-    return JSON.parse(jsonStr);
-  } catch (err) {
-    // Provide better error context for JSON parsing failures
-    const preview = jsonStr.slice(0, 250).replace(/\n/g, '\\n');
-    const msg = err instanceof Error ? err.message : String(err);
-    throw new Error(`JSON parse failed: ${msg}. Preview: ${preview}...`);
-  }
+  // parseAIJson handles fenced blocks, trailing prose/commas, truncation, and
+  // raw control chars inside strings — the full set of common LLM JSON defects.
+  return parseAIJson<any>(text);
 }
 
 export async function POST(req: NextRequest) {

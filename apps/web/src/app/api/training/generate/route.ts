@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { callAI, callOpenRouter, extractFinalAnswer } from '@/lib/ai/openrouter';
+import { parseAIJson } from '@/lib/ai/json';
 
 const SCENARIO_SEEDS = [
   { category: 'Phishing', difficulty: 'intermediate' },
@@ -88,10 +89,7 @@ const LAB_SEEDS = [
 ];
 
 function extractJSON(text: string): any {
-  const cleaned = extractFinalAnswer(text);
-  const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) throw new Error('No JSON in response');
-  return JSON.parse(jsonMatch[0]);
+  return parseAIJson<any>(text);
 }
 
 export async function POST(req: NextRequest) {
@@ -130,10 +128,8 @@ Return ONLY a JSON array:
         [{ role: 'system', content: system }, { role: 'user', content: user }],
         { maxTokens: 1500, temperature: 0.85, preferProvider: 'auto' },
       );
-      const cleaned = extractFinalAnswer(result.content);
-      const arrMatch = cleaned.match(/\[[\s\S]*\]/);
-      if (!arrMatch) throw new Error('No array in response');
-      const scenarios = JSON.parse(arrMatch[0]);
+      const parsedB = parseAIJson<unknown>(result.content);
+      const scenarios = Array.isArray(parsedB) ? parsedB : ((parsedB as { scenarios?: unknown[] })?.scenarios ?? []);
       return NextResponse.json({ scenarios, model: result.model });
     }
 

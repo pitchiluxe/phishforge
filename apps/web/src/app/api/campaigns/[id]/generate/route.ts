@@ -2,6 +2,27 @@ import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { createServerClient } from '@/lib/supabase/server';
 import { callOpenRouter, stripThinkTags } from '@/lib/ai/openrouter';
+import { parseAIJson } from '@/lib/ai/json';
+
+// Last-resort recovery when the model produced JSON we still can't parse (usually
+// unescaped quotes inside body_html): pull the fields out with tolerant regexes.
+function extractFields(raw: string): Record<string, string> | null {
+  const grab = (key: string) => {
+    const m = raw.match(new RegExp(`"${key}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"`, 's'));
+    return m ? m[1].replace(/\\"/g, '"').replace(/\\n/g, '\n').replace(/\\\\/g, '\\') : undefined;
+  };
+  const subject = grab('subject');
+  const body_html = grab('body_html');
+  const body_text = grab('body_text');
+  if (!subject && !body_html && !body_text) return null;
+  return {
+    subject: subject ?? 'Security Notice',
+    sender_name: grab('sender_name') ?? 'IT Support',
+    sender_email: grab('sender_email') ?? 'no-reply@company.com',
+    body_html: body_html ?? body_text ?? '',
+    body_text: body_text ?? (body_html ?? '').replace(/<[^>]+>/g, ''),
+  };
+}
 
 function isDemoOrPlaceholder() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
@@ -46,6 +67,8 @@ RULES:
 - Use {{employee_name}} for target name
 - Use {{company_name}} for organization name
 - Return ONLY valid JSON (no markdown fences, no extra text)
+- In body_html, use SINGLE quotes for every HTML attribute (e.g. <a href='{{tracking_url}}'>) so the JSON stays valid
+- Escape any double quotes inside string values as \\" and write newlines as \\n (never a raw line break)
 
 OUTPUT FORMAT (exactly):
 {"subject":"...","sender_name":"...","sender_email":"...","body_html":"...","body_text":"..."}`;
@@ -72,7 +95,7 @@ ${body.context ? `Context: ${body.context}` : ''}`;
             model: primaryModel ?? 'llama3.2',
             prompt: `<system>${systemPrompt}</system>\n\n${userPrompt}`,
             stream: false,
-            options: { temperature: 0.7, num_predict: 1500 },
+            options: { temperature: 0.7, num_predict: 2500 },
           }),
           signal: AbortSignal.timeout(120_000),
         });
@@ -92,7 +115,7 @@ ${body.context ? `Context: ${body.context}` : ''}`;
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },
         ],
-        { maxTokens: 1500, temperature: 0.7, primaryModel },
+        { maxTokens: 2500, temperature: 0.7, primaryModel },
       );
       content = stripThinkTags(result.content);
     }
@@ -101,9 +124,11 @@ ${body.context ? `Context: ${body.context}` : ''}`;
 
     let parsed: any;
     try {
-      const jsonMatch = content.match(/\{[\s\S]*\}/);
-      parsed = JSON.parse(jsonMatch?.[0] ?? content);
+      parsed = parseAIJson<any>(content);
     } catch {
+      parsed = extractFields(content);
+    }
+    if (!parsed || (!parsed.subject && !parsed.body_html && !parsed.body_text)) {
       return NextResponse.json({ error: 'AI returned invalid JSON. Try again.' }, { status: 422 });
     }
 

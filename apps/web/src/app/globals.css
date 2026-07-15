@@ -179,9 +179,14 @@
     z-index: 9998;
   }
 
-  /* Page entry animation */
+  /* Page entry animation.
+     NOTE: fill-mode must NOT persist the transform. A lingering transform on
+     this wrapper would become the containing block for the sticky <Header>,
+     making it stick to this (scrolling) wrapper instead of <main> — the header
+     would then scroll out of view during AI generation. Ending with no transform
+     keeps the header pinned. */
   .animate-in {
-    animation: fadeSlideUp 0.25s ease-out both;
+    animation: fadeSlideUp 0.25s ease-out;
   }
 
   /* Glitch text effect */

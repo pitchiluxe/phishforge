@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { callOpenRouter, extractFinalAnswer } from '@/lib/ai/openrouter';
+import { callOpenRouter } from '@/lib/ai/openrouter';
+import { parseAIJson } from '@/lib/ai/json';
 
 const SYSTEM_PROMPT = `You are a senior cybersecurity hiring manager generating realistic interview questions.
 Return ONLY a JSON array — no markdown fences, no explanation, no preamble.
@@ -55,21 +56,12 @@ Return the JSON array directly.`;
       { maxTokens: 2500, temperature: 0.75 },
     );
 
-    let raw = extractFinalAnswer(result.content).trim();
-    // Strip markdown fences if the model wrapped the output anyway
-    raw = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+    const parsedQ = parseAIJson<unknown>(result.content);
+    const questions: unknown[] = Array.isArray(parsedQ)
+      ? parsedQ
+      : ((parsedQ as { questions?: unknown[] })?.questions ?? []);
 
-    let questions: unknown[];
-    try {
-      questions = JSON.parse(raw);
-    } catch {
-      // Attempt to extract first JSON array from the response
-      const match = raw.match(/\[[\s\S]*\]/);
-      if (!match) throw new Error('No JSON array found in response');
-      questions = JSON.parse(match[0]);
-    }
-
-    if (!Array.isArray(questions)) throw new Error('Expected array from model');
+    if (!Array.isArray(questions) || questions.length === 0) throw new Error('Expected array from model');
 
     return NextResponse.json({ questions, model: result.model });
   } catch (err: unknown) {

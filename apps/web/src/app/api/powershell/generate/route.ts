@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { callOpenRouter, extractFinalAnswer } from '@/lib/ai/openrouter';
+import { callOpenRouter } from '@/lib/ai/openrouter';
+import { parseAIJson } from '@/lib/ai/json';
 
 const CATEGORY_SEEDS = [
   { category: 'Active Directory',   difficulty: 'intermediate', color: '#60a5fa' },
@@ -72,11 +73,10 @@ Return ONLY a valid JSON array — no markdown, no explanation:
       { maxTokens: 3000, temperature: 0.82 },
     );
 
-    const cleaned = extractFinalAnswer(result.content);
-    const arrMatch = cleaned.match(/\[[\s\S]*\]/);
-    if (!arrMatch) throw new Error('AI did not return a valid JSON array');
-
-    const scenarios = JSON.parse(arrMatch[0]);
+    const parsed = parseAIJson<unknown>(result.content);
+    const scenarios: any[] = Array.isArray(parsed)
+      ? parsed
+      : ((parsed as { scenarios?: any[] })?.scenarios ?? []);
 
     // Validate each entry has required fields
     const valid = scenarios.filter(
