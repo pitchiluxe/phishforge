@@ -4,7 +4,9 @@ import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Brain, Server, Zap, RefreshCw, Trash2, Download, Check, AlertCircle, Loader2, Wifi, WifiOff } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { createClient } from '@/lib/supabase/client';
 import toast from 'react-hot-toast';
+import { OllamaModelSelector, OpenRouterModelSelector } from './model-pull-selector';
 import type { AIProvider, OllamaModel, OpenRouterModel } from '@phishforge/shared';
 
 interface AISettingsPanelProps {
@@ -48,12 +50,17 @@ export function AISettingsPanel({
   async function loadOpenRouterModels() {
     setLoadingOpenRouter(true);
     try {
+      const token = localStorage.getItem('auth_token');
       const [statusRes, modelsRes] = await Promise.all([
-        fetch('/api/ai/status'),
-        fetch('/api/ai/models/openrouter'),
+        fetch('/api/v1/ai/status', {
+          headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+        }),
+        fetch('/api/v1/ai/models/openrouter', {
+          headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+        }),
       ]);
-      const status = await statusRes.json();
-      const models = await modelsRes.json();
+      const status = statusRes.ok ? await statusRes.json() : {};
+      const models = modelsRes.ok ? await modelsRes.json() : [];
       setOpenRouterConnected(status.openrouter?.connected ?? false);
       setOpenRouterModels(Array.isArray(models) ? models : []);
     } catch {
@@ -66,12 +73,17 @@ export function AISettingsPanel({
   async function loadOllamaModels() {
     setLoadingOllama(true);
     try {
+      const token = localStorage.getItem('auth_token');
       const [statusRes, modelsRes] = await Promise.all([
-        fetch('/api/ai/status'),
-        fetch('/api/ai/models/ollama'),
+        fetch('/api/v1/ai/status', {
+          headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+        }),
+        fetch('/api/v1/ai/models/ollama', {
+          headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+        }),
       ]);
-      const status = await statusRes.json();
-      const models = await modelsRes.json();
+      const status = statusRes.ok ? await statusRes.json() : {};
+      const models = modelsRes.ok ? await modelsRes.json() : [];
       setOllamaConnected(status.ollama?.connected ?? false);
       setOllamaModels(Array.isArray(models) ? models : []);
     } catch {
@@ -87,9 +99,13 @@ export function AISettingsPanel({
     toast.loading(`Pulling ${pullInput}…`, { id: 'pull' });
 
     try {
-      const res = await fetch('/api/ai/models/ollama/pull', {
+      const token = localStorage.getItem('auth_token');
+      const res = await fetch('/api/v1/ai/models/ollama/pull', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({ model: pullInput.trim() }),
       });
 
@@ -123,7 +139,11 @@ export function AISettingsPanel({
   async function deleteOllamaModel(modelName: string) {
     if (!confirm(`Delete model "${modelName}"? This cannot be undone.`)) return;
     try {
-      await fetch(`/api/ai/models/ollama/${encodeURIComponent(modelName)}`, { method: 'DELETE' });
+      const token = localStorage.getItem('auth_token');
+      await fetch(`/api/v1/ai/models/ollama/${encodeURIComponent(modelName)}`, {
+        method: 'DELETE',
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+      });
       toast.success(`${modelName} deleted`);
       await loadOllamaModels();
     } catch {
@@ -134,21 +154,61 @@ export function AISettingsPanel({
   async function saveSettings() {
     setSaving(true);
     try {
+      const supabase = createClient();
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session?.user) {
+        throw new Error('Not authenticated - no session found');
+      }
+
+      // For demo mode, use the fake token from demo-login cookie
+      let token: string | undefined;
+      const isDemoMode = !process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL.includes('placeholder');
+      
+      if (isDemoMode) {
+        // In demo mode, use a placeholder token
+        token = 'demo-token-placeholder';
+        console.log('Demo mode detected, using placeholder token');
+      } else {
+        // In production, use the Supabase session access token
+        token = session.access_token;
+      }
+
+      if (!token) {
+        throw new Error('Failed to obtain authentication token');
+      }
+
       const body = {
         ai_provider: provider,
         ...(provider === 'openrouter'
           ? { openrouter_model: selectedOpenRouterModel }
           : { ai_model: selectedOllamaModel, ollama_base_url: ollamaUrl }),
       };
-      const res = await fetch('/api/organizations/settings', {
+
+      console.log('Saving settings:', body, 'User:', session.user.id);
+
+      const res = await fetch('/api/v1/organizations/me', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
         body: JSON.stringify(body),
       });
-      if (!res.ok) throw new Error('Save failed');
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        const msg = (errData as any)?.error || (errData as any)?.message || `HTTP ${res.status}`;
+        throw new Error(msg);
+      }
+
+      const data = await res.json();
+      console.log('Settings saved:', data);
       toast.success('AI settings saved!');
-    } catch {
-      toast.error('Failed to save settings');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      console.error('Save failed:', msg, err);
+      toast.error(`Failed to save settings: ${msg}`);
     } finally {
       setSaving(false);
     }
@@ -296,7 +356,21 @@ function OpenRouterPanel({
         </div>
       </div>
 
-      <div className="flex gap-3">
+      {/* Quick select dropdown */}
+      <div className="space-y-2">
+        <label className="text-sm font-medium">Quick Select Model</label>
+        <OpenRouterModelSelector
+          onSelect={onSelect}
+          onPull={async (modelName) => {
+            onSelect(modelName);
+            toast.success(`Selected ${modelName}`);
+          }}
+        />
+      </div>
+
+      {/* Search and filters */}
+      <div className="space-y-2">
+        <label className="text-sm font-medium">Browse & Search</label>
         <input
           type="text"
           value={search}
@@ -378,25 +452,69 @@ function OllamaPanel({
       </div>
 
       {/* Pull new model */}
-      <div className="space-y-2">
-        <label className="text-sm font-medium">Pull a model</label>
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={pullInput}
-            onChange={(e) => onPullInputChange(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && onPull()}
-            placeholder="e.g. llama3.2, mistral, gemma2"
-            className="flex-1 px-3 py-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-          />
-          <button
-            onClick={onPull}
-            disabled={!pullInput.trim() || !!pullingModel}
-            className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-all disabled:opacity-60 cursor-pointer"
-          >
-            {pullingModel ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-            Pull
-          </button>
+      <div className="space-y-3">
+        <label className="text-sm font-medium">Pull a Model</label>
+        <div className="grid gap-3">
+          {/* Dropdown selector for popular models */}
+          <div>
+            <p className="text-xs text-muted-foreground mb-2">Quick pull from popular models</p>
+            <OllamaModelSelector
+              onSelect={(modelName) => onSelect(modelName)}
+              onPull={async (modelName) => {
+                onPullInputChange(modelName);
+                // Trigger pull
+                const res = await fetch('/api/ai/models/ollama/pull', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ model: modelName }),
+                });
+
+                if (!res.ok) throw new Error('Pull failed');
+
+                const reader = res.body!.getReader();
+                const decoder = new TextDecoder();
+
+                while (true) {
+                  const { done, value } = await reader.read();
+                  if (done) break;
+                  const lines = decoder.decode(value).split('\n').filter(Boolean);
+                  for (const line of lines) {
+                    try {
+                      const data = JSON.parse(line);
+                      if (data.status === 'success') {
+                        toast.success(`${modelName} pulled successfully!`);
+                        onPullInputChange('');
+                        onRefresh();
+                      }
+                    } catch {}
+                  }
+                }
+              }}
+            />
+          </div>
+
+          {/* Or manual entry */}
+          <div>
+            <p className="text-xs text-muted-foreground mb-2">Or enter model name manually</p>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={pullInput}
+                onChange={(e) => onPullInputChange(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && onPull()}
+                placeholder="e.g. llama3.2, mistral, gemma2"
+                className="flex-1 px-3 py-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+              <button
+                onClick={onPull}
+                disabled={!pullInput.trim() || !!pullingModel}
+                className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-all disabled:opacity-60 cursor-pointer"
+              >
+                {pullingModel ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                Pull
+              </button>
+            </div>
+          </div>
         </div>
         <p className="text-xs text-muted-foreground">
           Popular: llama3.2, llama3.1, mistral, gemma2, qwen2.5, deepseek-r1, phi4

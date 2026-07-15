@@ -14,6 +14,9 @@ import type {
 @Injectable()
 export class AIService {
   private readonly logger = new Logger(AIService.name);
+  private cachedFreeModel: string | null = null;
+  private lastModelCheckTime = 0;
+  private readonly MODEL_CACHE_DURATION_MS = 5 * 60 * 1000; // 5 minutes
 
   constructor(
     private readonly config: ConfigService,
@@ -30,7 +33,7 @@ export class AIService {
     ollamaBaseUrl?: string,
   ): Promise<AIGenerateResponse> {
     const startTime = Date.now();
-    let result: AIGenerateResponse;
+    let result: AIGenerateResponse | undefined;
     let success = true;
     let errorMessage: string | undefined;
 
@@ -46,19 +49,21 @@ export class AIService {
       throw error;
     } finally {
       const latency = Date.now() - startTime;
-      await this.supabase.db.from('ai_generation_logs').insert({
-        organization_id: organizationId,
-        user_id: userId,
-        campaign_id: campaignId,
-        provider: request.provider,
-        model: request.model,
-        prompt_tokens: result?.usage?.prompt_tokens,
-        completion_tokens: result?.usage?.completion_tokens,
-        total_tokens: result?.usage?.total_tokens,
-        latency_ms: latency,
-        success,
-        error_message: errorMessage,
-      });
+      if (result) {
+        await this.supabase.db.from('ai_generation_logs').insert({
+          organization_id: organizationId,
+          user_id: userId,
+          campaign_id: campaignId,
+          provider: request.provider,
+          model: request.model,
+          prompt_tokens: result.usage?.prompt_tokens,
+          completion_tokens: result.usage?.completion_tokens,
+          total_tokens: result.usage?.total_tokens,
+          latency_ms: latency,
+          success,
+          error_message: errorMessage,
+        });
+      }
     }
 
     return result!;
@@ -77,11 +82,14 @@ export class AIService {
       .single();
 
     const provider: AIProvider = dto.ai_provider ?? org?.ai_provider ?? 'openrouter';
-    const model =
-      dto.ai_model ??
-      (provider === 'ollama'
-        ? org?.ai_model ?? this.config.get('OLLAMA_DEFAULT_MODEL', 'llama3.2')
-        : org?.openrouter_model ?? this.config.get('OPENROUTER_DEFAULT_MODEL', 'deepseek/deepseek-chat-v3-0324'));
+    
+    let model: string;
+    if (provider === 'openrouter') {
+      // Use provided model, org model, or find the best working free model
+      model = dto.ai_model ?? org?.openrouter_model ?? (await this.getBestAvailableModel());
+    } else {
+      model = dto.ai_model ?? org?.ai_model ?? this.config.get('OLLAMA_DEFAULT_MODEL', 'llama3.2');
+    }
 
     const systemPrompt = this.buildSystemPrompt();
     const userPrompt = this.buildUserPrompt(dto, knowledgeContext);
@@ -121,6 +129,23 @@ export class AIService {
         latency_ms: response.latency_ms,
       },
     };
+  }
+
+  /** Get the best available model: cached free model, env default, or fallback */
+  private async getBestAvailableModel(): Promise<string> {
+    const now = Date.now();
+    
+    // Return cached model if still valid
+    if (this.cachedFreeModel && (now - this.lastModelCheckTime) < this.MODEL_CACHE_DURATION_MS) {
+      this.logger.debug(`Using cached free model: ${this.cachedFreeModel}`);
+      return this.cachedFreeModel;
+    }
+
+    this.logger.debug('Model cache expired or not set, finding best free model...');
+    this.cachedFreeModel = await this.openRouter.getWorkingFreeModel();
+    this.lastModelCheckTime = now;
+    
+    return this.cachedFreeModel;
   }
 
   private buildSystemPrompt(): string {

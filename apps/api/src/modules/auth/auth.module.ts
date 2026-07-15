@@ -9,7 +9,7 @@ import { SupabaseModule } from '../../common/supabase/supabase.module';
 
 @Module({
   imports: [
-    PassportModule.register({ defaultStrategy: 'jwt' }),
+    PassportModule, // Removed defaultStrategy: 'jwt' - must be applied at endpoint level instead
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({

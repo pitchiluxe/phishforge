@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Youtube,
@@ -245,6 +245,9 @@ export default function TubePage() {
       setLoading(false);
     }
   }, []);
+
+  // Auto-load videos on first mount so the tab fills without an extra click.
+  useEffect(() => { fetchVideos(); }, [fetchVideos]);
 
   const filtered = useMemo(() => {
     return videos.filter((v) => {

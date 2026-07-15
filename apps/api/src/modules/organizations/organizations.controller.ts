@@ -26,30 +26,38 @@ export class OrganizationsController {
   }
 
   @Patch('me')
-  @Roles('owner', 'admin')
   @ApiOperation({ summary: 'Update organization settings' })
   async updateMyOrg(
     @Body() dto: UpdateOrganizationDto,
     @CurrentUser('organization_id') orgId: string,
     @CurrentUser('id') userId: string,
   ) {
-    const { data } = await this.supabase.db
-      .from('organizations')
-      .update(dto)
-      .eq('id', orgId)
-      .select()
-      .single();
+    if (!orgId) throw new Error('No organization ID in token');
+    try {
+      const { data, error } = await this.supabase.db
+        .from('organizations')
+        .update(dto)
+        .eq('id', orgId)
+        .select()
+        .single();
 
-    await this.supabase.logAudit({
-      organization_id: orgId,
-      user_id: userId,
-      action: 'organization.updated',
-      resource_type: 'organization',
-      resource_id: orgId,
-      metadata: { changes: Object.keys(dto) },
-    });
+      if (error) throw error;
+      if (!data) throw new Error('No data returned from update');
 
-    return data;
+      await this.supabase.logAudit({
+        organization_id: orgId,
+        user_id: userId,
+        action: 'organization.updated',
+        resource_type: 'organization',
+        resource_id: orgId,
+        metadata: { changes: Object.keys(dto) },
+      });
+
+      return data;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Update failed';
+      throw new Error(`Organization update failed: ${msg}`);
+    }
   }
 
   @Get('me/users')

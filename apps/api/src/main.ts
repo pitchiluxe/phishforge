@@ -12,6 +12,12 @@ async function bootstrap() {
 
   const config = app.get(ConfigService);
 
+  // Debug logging middleware
+  app.use((req, res, next) => {
+    console.log(`[Middleware] ${req.method} ${req.path} - Starting`);
+    next();
+  });
+
   // Security headers
   app.use(helmet());
 

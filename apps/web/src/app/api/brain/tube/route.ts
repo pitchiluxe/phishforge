@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { searchYouTubeKeyless, fallbackVideos, type KeylessVideo } from '@/lib/youtube/keyless';
 
 const CYBER_QUERIES = [
   'ethical hacking tutorial 2024',
@@ -37,68 +38,53 @@ function levelOf(title: string): string {
   return 'Intermediate';
 }
 
+function toVideo(v: KeylessVideo) {
+  return {
+    id: v.id,
+    title: v.title,
+    channel: v.channel,
+    description: (v.description ?? '').slice(0, 200) || 'No description available.',
+    thumbnail: v.thumbnail,
+    category: categorize(v.title, v.description ?? ''),
+    difficulty: levelOf(v.title),
+  };
+}
+
 export async function GET() {
+  const query = CYBER_QUERIES[Math.floor(Math.random() * CYBER_QUERIES.length)];
   const apiKey = process.env.YOUTUBE_API_KEY?.trim();
 
-  if (!apiKey) {
-    return NextResponse.json(
-      {
-        error: 'YOUTUBE_API_KEY is not configured.',
-        setup: true,
-        hint: 'Add YOUTUBE_API_KEY to your Vercel project environment variables, then redeploy.',
-      },
-      { status: 503 },
-    );
+  // 1) Preferred path — official Data API when a key is configured.
+  if (apiKey) {
+    const params = new URLSearchParams({
+      part: 'snippet', q: query, type: 'video', maxResults: '20',
+      key: apiKey, videoEmbeddable: 'true', relevanceLanguage: 'en', safeSearch: 'none',
+    });
+    try {
+      const res = await fetch(`https://www.googleapis.com/youtube/v3/search?${params}`, { cache: 'no-store' });
+      const data = await res.json();
+      if (res.ok) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const videos = (data.items ?? []).map((item: any) => toVideo({
+          id: item.id.videoId,
+          title: item.snippet.title,
+          channel: item.snippet.channelTitle,
+          description: item.snippet.description ?? '',
+          thumbnail: item.snippet.thumbnails?.high?.url ?? item.snippet.thumbnails?.medium?.url ?? `https://i.ytimg.com/vi/${item.id.videoId}/hqdefault.jpg`,
+          durationSec: 0,
+        }));
+        if (videos.length) return NextResponse.json({ videos, topic: query });
+      }
+    } catch { /* fall through to keyless */ }
   }
 
-  const query = CYBER_QUERIES[Math.floor(Math.random() * CYBER_QUERIES.length)];
-
-  const params = new URLSearchParams({
-    part: 'snippet',
-    q: query,
-    type: 'video',
-    maxResults: '20',
-    key: apiKey,
-    videoEmbeddable: 'true',
-    relevanceLanguage: 'en',
-    safeSearch: 'none',
-  });
-
-  try {
-    const res = await fetch(
-      `https://www.googleapis.com/youtube/v3/search?${params}`,
-      { cache: 'no-store' },
-    );
-    const data = await res.json();
-
-    if (!res.ok) {
-      const errMsg = data.error?.message ?? `YouTube API error (${res.status})`;
-      const isKeyError = res.status === 400 || res.status === 403;
-      return NextResponse.json(
-        { error: errMsg, setup: isKeyError },
-        { status: res.status },
-      );
-    }
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const videos = (data.items ?? []).map((item: any) => ({
-      id: item.id.videoId,
-      title: item.snippet.title,
-      channel: item.snippet.channelTitle,
-      description: (item.snippet.description ?? '').slice(0, 200) || 'No description available.',
-      thumbnail:
-        item.snippet.thumbnails?.high?.url ??
-        item.snippet.thumbnails?.medium?.url ??
-        `https://i.ytimg.com/vi/${item.id.videoId}/hqdefault.jpg`,
-      category: categorize(item.snippet.title, item.snippet.description ?? ''),
-      difficulty: levelOf(item.snippet.title),
-    }));
-
-    return NextResponse.json({ videos, topic: query });
-  } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Failed to reach YouTube API' },
-      { status: 500 },
-    );
+  // 2) Keyless path — scrape public search results (no API key needed).
+  const scraped = await searchYouTubeKeyless(query, 20);
+  if (scraped.length) {
+    return NextResponse.json({ videos: scraped.map(toVideo), topic: query });
   }
+
+  // 3) Last resort — curated verified pool so the tab always has playable content.
+  const shuffled = [...fallbackVideos()].sort(() => Math.random() - 0.5).slice(0, 20);
+  return NextResponse.json({ videos: shuffled.map(toVideo), topic: 'Curated cybersecurity picks' });
 }

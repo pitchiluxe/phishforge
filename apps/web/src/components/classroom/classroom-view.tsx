@@ -31,13 +31,19 @@ function AIGenerateBanner({
     setGenerating(true);
     const type = activeTab === 'labs' ? 'lab' : 'course';
     try {
+      console.log(`[classroom] Generating ${type}...`);
       const res = await fetch('/api/classroom/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ type }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      if (!res.ok) {
+        const msg = data.error || data.message || `HTTP ${res.status}`;
+        console.error(`[classroom] Generation failed:`, msg, data);
+        throw new Error(msg);
+      }
+      console.log(`[classroom] Generation success:`, data);
       if (type === 'lab') {
         onLabGenerated(data.lab);
         toast.success('AI lab generated!', { style: { background: '#0a0a0a', color: '#00ff41', border: '1px solid rgba(0,255,65,0.2)' } });
@@ -45,8 +51,10 @@ function AIGenerateBanner({
         onCourseGenerated(data.course);
         toast.success('AI course generated!', { style: { background: '#0a0a0a', color: '#00ff41', border: '1px solid rgba(0,255,65,0.2)' } });
       }
-    } catch (e: any) {
-      toast.error(e.message ?? 'Generation failed');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Generation failed';
+      console.error(`[classroom] Catch error:`, msg, err);
+      toast.error(msg);
     } finally {
       setGenerating(false);
     }
@@ -654,7 +662,7 @@ export function ClassroomView() {
         </button>
 
         {/* Course header */}
-        <div style={{ background: 'rgba(0,255,65,0.03)', border: '1px solid rgba(0,255,65,0.15)', borderRadius: 8, padding: '20px 24px', marginBottom: 20, borderLeft: `3px solid ${selectedCourse.accentColor}` }}>
+        <div style={{ background: 'rgba(0,255,65,0.03)', borderTop: '1px solid rgba(0,255,65,0.15)', borderRight: '1px solid rgba(0,255,65,0.15)', borderBottom: '1px solid rgba(0,255,65,0.15)', borderRadius: 8, padding: '20px 24px', marginBottom: 20, borderLeft: `3px solid ${selectedCourse.accentColor}` }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, marginBottom: 12 }}>
             <div>
               <h2 style={{ ...MONO, fontSize: 16, fontWeight: 700, color: '#c8ffd4', marginBottom: 6 }}>{selectedCourse.title}</h2>
@@ -730,7 +738,7 @@ export function ClassroomView() {
         onLabGenerated={lab => setAiLabs(prev => [lab, ...prev])}
       />
       {/* XP / Level header */}
-      <div style={{ background: 'rgba(0,255,65,0.03)', border: '1px solid rgba(0,255,65,0.15)', borderRadius: 10, padding: '20px 24px' }}>
+      <div style={{ background: 'rgba(0,255,65,0.03)', borderTop: '1px solid rgba(0,255,65,0.15)', borderRight: '1px solid rgba(0,255,65,0.15)', borderBottom: '1px solid rgba(0,255,65,0.15)', borderRadius: 10, padding: '20px 24px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
             <div style={{ width: 52, height: 52, borderRadius: '50%', background: `${level.color}18`, border: `2px solid ${level.color}`, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 0 16px ${level.glowColor}` }}>
@@ -798,7 +806,7 @@ export function ClassroomView() {
               <button onClick={() => { setActiveLab(null); setLabAnswer(''); setLabSubmitted(false); }} style={{ ...MONO, fontSize: 11, color: '#00ff41', opacity: 0.5, background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, marginBottom: 20 }}>
                 <ChevronLeft size={12} /> All Labs
               </button>
-              <div style={{ background: 'rgba(0,255,65,0.03)', border: `2px solid ${activeLab.accentColor}30`, borderLeft: `3px solid ${activeLab.accentColor}`, borderRadius: 10, padding: '20px 24px', marginBottom: 20 }}>
+              <div style={{ background: 'rgba(0,255,65,0.03)', borderTop: `2px solid ${activeLab.accentColor}30`, borderRight: `2px solid ${activeLab.accentColor}30`, borderBottom: `2px solid ${activeLab.accentColor}30`, borderLeft: `3px solid ${activeLab.accentColor}`, borderRadius: 10, padding: '20px 24px', marginBottom: 20 }}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 12 }}>
                   <div style={{ flex: 1 }}>
                     <div style={{ ...MONO, fontSize: 9, color: activeLab.accentColor, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>{activeLab.category}</div>
@@ -880,7 +888,10 @@ export function ClassroomView() {
                     style={{
                       display: 'flex', flexDirection: 'column', gap: 0, padding: '16px 18px',
                       background: isAILab ? 'rgba(167,139,250,0.03)' : 'rgba(0,255,65,0.02)', borderRadius: 10, cursor: 'pointer',
-                      border: isAILab ? '1px solid rgba(167,139,250,0.2)' : '1px solid rgba(0,255,65,0.1)', borderLeft: `3px solid ${lab.accentColor}`,
+                      borderTop: isAILab ? '1px solid rgba(167,139,250,0.2)' : '1px solid rgba(0,255,65,0.1)',
+                      borderRight: isAILab ? '1px solid rgba(167,139,250,0.2)' : '1px solid rgba(0,255,65,0.1)',
+                      borderBottom: isAILab ? '1px solid rgba(167,139,250,0.2)' : '1px solid rgba(0,255,65,0.1)',
+                      borderLeft: `3px solid ${lab.accentColor}`,
                       textAlign: 'left', transition: 'all 150ms',
                     }}
                     onMouseEnter={e => { e.currentTarget.style.background = isAILab ? 'rgba(167,139,250,0.06)' : 'rgba(0,255,65,0.05)'; }}
@@ -923,7 +934,9 @@ export function ClassroomView() {
                 style={{
                   display: 'flex', flexDirection: 'column', gap: 0, padding: '18px 20px',
                   background: isAI ? 'rgba(167,139,250,0.03)' : 'rgba(0,255,65,0.02)', borderRadius: 10, cursor: 'pointer',
-                  border: `1px solid ${pct === 100 ? 'rgba(0,255,65,0.3)' : isAI ? 'rgba(167,139,250,0.2)' : 'rgba(0,255,65,0.1)'}`,
+                  borderTop: `1px solid ${pct === 100 ? 'rgba(0,255,65,0.3)' : isAI ? 'rgba(167,139,250,0.2)' : 'rgba(0,255,65,0.1)'}`,
+                  borderRight: `1px solid ${pct === 100 ? 'rgba(0,255,65,0.3)' : isAI ? 'rgba(167,139,250,0.2)' : 'rgba(0,255,65,0.1)'}`,
+                  borderBottom: `1px solid ${pct === 100 ? 'rgba(0,255,65,0.3)' : isAI ? 'rgba(167,139,250,0.2)' : 'rgba(0,255,65,0.1)'}`,
                   borderLeft: `3px solid ${course.accentColor}`,
                   textAlign: 'left', transition: 'all 150ms', position: 'relative',
                 }}

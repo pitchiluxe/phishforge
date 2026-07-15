@@ -1,5 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { callOpenRouter, extractFinalAnswer } from '@/lib/ai/openrouter';
+import { callAI, callOpenRouter, extractFinalAnswer } from '@/lib/ai/openrouter';
+
+async function getAvailableModels(): Promise<string[]> {
+  try {
+    // Try to fetch from API (cached list of free models)
+    const res = await fetch(
+      `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/v1/ai/models/openrouter/free/best`,
+      {
+        headers: {
+          'Authorization': `Bearer ${process.env.API_TOKEN || ''}`,
+        },
+      }
+    ).catch(() => null);
+
+    if (res?.ok) {
+      const data = await res.json();
+      return (data.models || []).map((m: any) => m.id);
+    }
+  } catch (err) {
+    console.warn('Failed to fetch dynamic model list:', err);
+  }
+
+  // Fallback to the reliable free Llama 3.1 8B model
+  return [
+    'meta-llama/llama-3.1-8b-instruct:free',
+  ];
+}
 
 const COURSE_TOPICS = [
   'Advanced Phishing Attack Techniques 2025',
@@ -60,10 +86,38 @@ const LAB_TOPICS = [
 ];
 
 function extractJSON(text: string): any {
-  const cleaned = extractFinalAnswer(text);
+  let cleaned = extractFinalAnswer(text);
+  
+  // Strip backticks (Ollama wraps responses in markdown: ```json ... ```)
+  cleaned = cleaned.replace(/```[\s\S]*?```/g, '');
+  cleaned = cleaned.replace(/`/g, '');
+  
   const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
   if (!jsonMatch) throw new Error('No JSON found in response');
-  return JSON.parse(jsonMatch[0]);
+  
+  let jsonStr = jsonMatch[0];
+  
+  // Fix unescaped newlines/tabs in JSON strings (common issue from LLM outputs)
+  // This handles cases like: "description": "Line 1\nLine 2" (unescaped newline)
+  // by escaping them: "description": "Line 1\\nLine 2"
+  jsonStr = jsonStr.replace(/("[^"\\]*(?:\\.[^"\\]*)*")/g, (match) => {
+    // Inside quoted strings, escape unescaped control characters
+    return match
+      .replace(/\n/g, '\\n')     // Actual newline → \n
+      .replace(/\r/g, '\\r')     // Actual carriage return → \r
+      .replace(/\t/g, '\\t')     // Actual tab → \t
+      .replace(/\f/g, '\\f')     // Actual form feed → \f
+      .replace(/\b/g, '\\b');    // Actual backspace → \b
+  });
+  
+  try {
+    return JSON.parse(jsonStr);
+  } catch (err) {
+    // Provide better error context for JSON parsing failures
+    const preview = jsonStr.slice(0, 250).replace(/\n/g, '\\n');
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(`JSON parse failed: ${msg}. Preview: ${preview}...`);
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -71,6 +125,9 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => ({}));
     const type: 'course' | 'lab' = body.type ?? 'course';
     const providedTopic: string | undefined = body.topic;
+
+    // Fetch dynamic model list from backend (falls back to defaults)
+    const modelList = await getAvailableModels();
 
     if (type === 'lab') {
       const topic = providedTopic ?? LAB_TOPICS[Math.floor(Math.random() * LAB_TOPICS.length)];
@@ -97,9 +154,9 @@ Return ONLY valid JSON matching this exact schema:
   "tags": ["<tag 1>", "<tag 2>", "<tag 3>"]
 }`;
 
-      const result = await callOpenRouter(
+      const result = await callAI(
         [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
-        { maxTokens: 2000, temperature: 0.8 },
+        { maxTokens: 2000, temperature: 0.8, modelList, preferProvider: 'auto' },
       );
       const lab = extractJSON(result.content);
       lab.id = lab.id ?? `ai-lab-${Date.now()}`;
@@ -171,9 +228,9 @@ Return ONLY valid JSON matching this exact schema:
   ]
 }`;
 
-    const result = await callOpenRouter(
+    const result = await callAI(
       [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
-      { maxTokens: 3000, temperature: 0.8 },
+      { maxTokens: 3000, temperature: 0.8, modelList, preferProvider: 'auto' },
     );
     const course = extractJSON(result.content);
     course.id = course.id ?? `ai-course-${Date.now()}`;
@@ -182,6 +239,13 @@ Return ONLY valid JSON matching this exact schema:
     return NextResponse.json({ course, model: result.model });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Generation failed';
-    return NextResponse.json({ error: msg }, { status: 500 });
+    console.error('[classroom/generate]', msg, err);
+    return NextResponse.json(
+      { 
+        error: msg,
+        details: err instanceof Error ? err.stack : undefined
+      },
+      { status: 500 }
+    );
   }
 }

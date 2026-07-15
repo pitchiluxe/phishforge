@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { callOpenRouter, extractFinalAnswer } from '@/lib/ai/openrouter';
+import { callAI, callOpenRouter, extractFinalAnswer } from '@/lib/ai/openrouter';
 
 const SCENARIO_SEEDS = [
   { category: 'Phishing', difficulty: 'intermediate' },
@@ -126,9 +126,9 @@ Return ONLY a JSON array:
   }
 ]`;
 
-      const result = await callOpenRouter(
+      const result = await callAI(
         [{ role: 'system', content: system }, { role: 'user', content: user }],
-        { maxTokens: 1500, temperature: 0.85 },
+        { maxTokens: 1500, temperature: 0.85, preferProvider: 'auto' },
       );
       const cleaned = extractFinalAnswer(result.content);
       const arrMatch = cleaned.match(/\[[\s\S]*\]/);
@@ -198,9 +198,9 @@ Return ONLY valid JSON:
   ]
 }`;
 
-      const result = await callOpenRouter(
+      const result = await callAI(
         [{ role: 'system', content: system }, { role: 'user', content: user }],
-        { maxTokens: 1500, temperature: 0.85 },
+        { maxTokens: 1500, temperature: 0.85, preferProvider: 'auto' },
       );
       const lab = extractJSON(result.content);
       lab.id = lab.id ?? `ai-lab-${Date.now()}`;
@@ -230,15 +230,22 @@ Return ONLY valid JSON:
   "xpReward": <75-200>
 }`;
 
-    const result = await callOpenRouter(
+    const result = await callAI(
       [{ role: 'system', content: system }, { role: 'user', content: user }],
-      { maxTokens: 1000, temperature: 0.85 },
+      { maxTokens: 1000, temperature: 0.85, preferProvider: 'auto' },
     );
     const scenario = extractJSON(result.content);
     scenario.id = scenario.id ?? `ai-scenario-${Date.now()}`;
     return NextResponse.json({ scenario, model: result.model });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Generation failed';
-    return NextResponse.json({ error: msg }, { status: 500 });
+    console.error('[training/generate]', msg, err);
+    return NextResponse.json(
+      {
+        error: msg,
+        details: err instanceof Error ? err.stack : undefined
+      },
+      { status: 500 }
+    );
   }
 }

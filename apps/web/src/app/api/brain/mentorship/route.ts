@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { searchYouTubeKeyless, fallbackVideos, type KeylessVideo } from '@/lib/youtube/keyless';
 
 type Level = 'Beginner' | 'Intermediate' | 'Advanced';
 type CourseCategory =
@@ -69,72 +70,65 @@ function categoryOf(title: string, desc: string, queryCategory: CourseCategory):
   return queryCategory;
 }
 
+function toCourse(v: KeylessVideo, queryLevel: Level, queryCategory: CourseCategory) {
+  return {
+    id: v.id,
+    title: v.title,
+    channel: v.channel,
+    description: (v.description ?? '').slice(0, 220) || 'No description available.',
+    thumbnail: v.thumbnail,
+    level: levelOf(v.title, queryLevel),
+    category: categoryOf(v.title, v.description ?? '', queryCategory),
+  };
+}
+
 export async function GET() {
+  const queryObj = COURSE_QUERIES[Math.floor(Math.random() * COURSE_QUERIES.length)];
   const apiKey = process.env.YOUTUBE_API_KEY?.trim();
 
-  if (!apiKey) {
-    return NextResponse.json(
-      {
-        error: 'YOUTUBE_API_KEY is not configured.',
-        setup: true,
-        hint: 'Add YOUTUBE_API_KEY to your Vercel project environment variables, then redeploy.',
-      },
-      { status: 503 },
-    );
+  // 1) Preferred path — official Data API when a key is configured.
+  if (apiKey) {
+    const params = new URLSearchParams({
+      part: 'snippet', q: queryObj.q, type: 'video', maxResults: '20',
+      key: apiKey, videoEmbeddable: 'true', relevanceLanguage: 'en', safeSearch: 'moderate', videoDuration: 'long',
+    });
+    try {
+      const res = await fetch(`https://www.googleapis.com/youtube/v3/search?${params}`, { cache: 'no-store' });
+      const data = await res.json();
+      if (res.ok) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const courses = (data.items ?? []).map((item: any) => toCourse({
+          id: item.id.videoId,
+          title: item.snippet.title,
+          channel: item.snippet.channelTitle,
+          description: item.snippet.description ?? '',
+          thumbnail: item.snippet.thumbnails?.high?.url ?? item.snippet.thumbnails?.medium?.url ?? `https://i.ytimg.com/vi/${item.id.videoId}/hqdefault.jpg`,
+          durationSec: 0,
+        }, queryObj.level, queryObj.category));
+        if (courses.length) {
+          return NextResponse.json(
+            { courses, topic: queryObj.q, focusLevel: queryObj.level },
+            { headers: { 'Cache-Control': 's-maxage=300, stale-while-revalidate=60' } },
+          );
+        }
+      }
+    } catch { /* fall through to keyless */ }
   }
 
-  const queryObj = COURSE_QUERIES[Math.floor(Math.random() * COURSE_QUERIES.length)];
-
-  const params = new URLSearchParams({
-    part: 'snippet',
-    q: queryObj.q,
-    type: 'video',
-    maxResults: '20',
-    key: apiKey,
-    videoEmbeddable: 'true',
-    relevanceLanguage: 'en',
-    safeSearch: 'moderate',
-    videoDuration: 'long',
-  });
-
-  try {
-    const res = await fetch(
-      `https://www.googleapis.com/youtube/v3/search?${params}`,
-      { cache: 'no-store' },
-    );
-    const data = await res.json();
-
-    if (!res.ok) {
-      const errMsg = data.error?.message ?? `YouTube API error (${res.status})`;
-      const isKeyError = res.status === 400 || res.status === 403;
-      return NextResponse.json(
-        { error: errMsg, setup: isKeyError },
-        { status: res.status },
-      );
-    }
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const courses = (data.items ?? []).map((item: any) => ({
-      id: item.id.videoId,
-      title: item.snippet.title,
-      channel: item.snippet.channelTitle,
-      description: (item.snippet.description ?? '').slice(0, 220) || 'No description available.',
-      thumbnail:
-        item.snippet.thumbnails?.high?.url ??
-        item.snippet.thumbnails?.medium?.url ??
-        `https://i.ytimg.com/vi/${item.id.videoId}/hqdefault.jpg`,
-      level: levelOf(item.snippet.title, queryObj.level),
-      category: categoryOf(item.snippet.title, item.snippet.description ?? '', queryObj.category),
-    }));
-
-    return NextResponse.json(
-      { courses, topic: queryObj.q, focusLevel: queryObj.level },
-      { headers: { 'Cache-Control': 's-maxage=300, stale-while-revalidate=60' } },
-    );
-  } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Failed to reach YouTube API' },
-      { status: 500 },
-    );
+  // 2) Keyless path — scrape public results, then prefer longer, course-length videos.
+  const scraped = await searchYouTubeKeyless(queryObj.q, 25);
+  if (scraped.length) {
+    const courses = [...scraped]
+      .sort((a, b) => b.durationSec - a.durationSec)
+      .slice(0, 20)
+      .map((v) => toCourse(v, queryObj.level, queryObj.category));
+    return NextResponse.json({ courses, topic: queryObj.q, focusLevel: queryObj.level });
   }
+
+  // 3) Last resort — curated verified pool (longest first so it reads as a course list).
+  const courses = [...fallbackVideos()]
+    .sort((a, b) => b.durationSec - a.durationSec)
+    .slice(0, 20)
+    .map((v) => toCourse(v, queryObj.level, queryObj.category));
+  return NextResponse.json({ courses, topic: 'Curated cybersecurity courses', focusLevel: queryObj.level });
 }

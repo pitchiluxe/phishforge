@@ -1,26 +1,34 @@
-// Shared OpenRouter client — mirrors the QuickBooks Playground pattern.
-// Env vars (checked in order): OPENROUTER_API_KEY, ANTHROPIC_AUTH_TOKEN, ANTHROPIC_API_KEY
-// Base URL vars: OPENROUTER_BASE_URL, ANTHROPIC_BASE_URL (default: openrouter.ai/api/v1)
+// Shared AI client with Ollama (free, local) + OpenRouter (backup) support
+// Strategy: Try Ollama first (true free tier), fallback to OpenRouter if available
+// Env vars checked: OLLAMA_BASE_URL, OPENROUTER_API_KEY, ANTHROPIC_AUTH_TOKEN, ANTHROPIC_API_KEY
 
-export const FREE_MODELS = [
-  // 2026-verified working on OpenRouter (ordered by speed/quality)
-  'deepseek/deepseek-v4-flash:free',
-  'openai/gpt-oss-20b:free',
-  'openai/gpt-oss-120b:free',
-  'google/gemma-4-31b-it:free',
-  'google/gemma-4-26b-a4b-it:free',
-  'nvidia/nemotron-3-super-120b-a12b:free',
-  'nvidia/nemotron-nano-9b-v2:free',
-  'qwen/qwen3-next-80b-a3b-instruct:free',
-  'qwen/qwen3-14b:free',
+// Ollama models (free, local) - only fast/small models to avoid OOM
+// Models must be installed locally. Run: ollama pull <model>
+// Ordered fastest-first so responses come back quickly; callOllama waterfalls
+// through them and returns the first that answers. OLLAMA_DEFAULT_MODEL (if set)
+// is tried before all of these.
+export const OLLAMA_MODELS = [
+  'llama3.2:3b',          // fast (3.2B params)
+  'phi3:mini',            // ultra-fast (3.8B params)
+  'mistral:7b',           // balanced quality/speed (7B params)
+  'llama3.1:8b',          // higher quality, slower (8B params)
+] as const;
+
+// OpenRouter free-tier waterfall — verified available on the account (":free" slugs,
+// $0 prompt/completion). callOpenRouter tries these in order, rolling to the next on
+// any error/rate-limit, so a single model being throttled never breaks a request.
+// NOTE: OpenRouter caps *all* free models to a shared per-account daily quota unless
+// you add credits; when that quota is hit every :free model returns 429. Ollama is the
+// only truly unlimited free path, which is why callAI prefers it first.
+export const FALLBACK_FREE_MODELS = [
   'meta-llama/llama-3.3-70b-instruct:free',
-  'meta-llama/llama-3.2-3b-instruct:free',
-  'arcee-ai/trinity-large-thinking:free',
+  'qwen/qwen3-next-80b-a3b-instruct:free',
+  'google/gemma-4-31b-it:free',
+  'nvidia/nemotron-3-super-120b-a12b:free',
+  'openai/gpt-oss-20b:free',
   'nousresearch/hermes-3-llama-3.1-405b:free',
-  'mistralai/mistral-7b-instruct:free',
-  // Older still-working fallbacks
-  'deepseek/deepseek-r1:free',
-  'deepseek/deepseek-r1-0528:free',
+  'google/gemma-4-26b-a4b-it:free',
+  'meta-llama/llama-3.2-3b-instruct:free',
 ] as const;
 
 export type OAMessage = { role: 'system' | 'user' | 'assistant'; content: string };
@@ -67,15 +75,145 @@ function sleep(ms: number) {
   return new Promise<void>((r) => setTimeout(r, ms));
 }
 
+function getOllamaUrl(): string {
+  const raw = (process.env.OLLAMA_BASE_URL || 'http://localhost:11434').replace(/\/+$/, '');
+  return raw;
+}
+
+async function isOllamaAvailable(): Promise<boolean> {
+  try {
+    const res = await fetch(`${getOllamaUrl()}/api/tags`, {
+      method: 'GET',
+      signal: AbortSignal.timeout(5000), // Increased timeout for slower systems
+    });
+    return res.ok;
+  } catch (err) {
+    console.debug('[ollama] availability check failed:', err instanceof Error ? err.message : String(err));
+    return false;
+  }
+}
+
+async function callOllama(
+  messages: OAMessage[],
+  opts: {
+    maxTokens?: number;
+    temperature?: number;
+    modelList?: string[];
+  } = {},
+): Promise<{ content: string; model: string; tokens: number }> {
+  const { maxTokens = 1400, temperature = 0.7, modelList } = opts;
+  const url = `${getOllamaUrl()}/api/chat`;
+  const models = modelList && modelList.length > 0 ? modelList : [...OLLAMA_MODELS];
+
+  let lastError = new Error('No Ollama models tried');
+
+  for (const model of models) {
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model,
+          messages,
+          stream: false,
+          options: {
+            num_predict: maxTokens,
+            temperature,
+          },
+        }),
+        signal: AbortSignal.timeout(600000), // 10 min timeout for Ollama (models can be slow locally)
+      });
+
+      if (!res.ok) {
+        const txt = await res.text().catch(() => `HTTP ${res.status}`);
+        throw new Error(`${model} → ${res.status}: ${txt.slice(0, 300)}`);
+      }
+
+      const data: any = await res.json();
+      const content = data.message?.content ?? '';
+      if (!content) throw new Error(`${model} returned empty content`);
+
+      return {
+        content,
+        model: `ollama:${model}`,
+        tokens: data.prompt_eval_count + data.eval_count || 0,
+      };
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      console.warn(`[ollama] ${model} failed: ${lastError.message}`);
+    }
+  }
+
+  throw new Error(`All Ollama models failed: ${lastError.message}`);
+}
+
+export async function callAI(
+  messages: OAMessage[],
+  opts: {
+    maxTokens?: number;
+    temperature?: number;
+    primaryModel?: string;
+    modelList?: string[];
+    preferProvider?: 'ollama' | 'openrouter' | 'auto';
+  } = {},
+): Promise<{ content: string; model: string; tokens: number }> {
+  const { preferProvider = 'auto' } = opts;
+
+  // Try Ollama first if available (truly free, no API key needed)
+  const shouldTryOllama = preferProvider === 'auto' || preferProvider === 'ollama';
+  if (shouldTryOllama) {
+    try {
+      const available = await isOllamaAvailable();
+      if (available) {
+        console.log('[AI] ✓ Ollama available, using local model');
+        // Try the configured default model first (usually the fastest one the user
+        // has picked), then the rest of the installed set.
+        const envModel = (process.env.OLLAMA_DEFAULT_MODEL || '').trim();
+        const ollamaList = [...new Set([envModel, ...OLLAMA_MODELS].filter(Boolean))];
+        return await callOllama(messages, { ...opts, modelList: ollamaList });
+      } else {
+        console.log('[AI] Ollama not available (check: ollama serve is running)');
+      }
+    } catch (err) {
+      console.log('[AI] Ollama check failed:', err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  // Fall back to OpenRouter, cycling through the free-model waterfall. Skip only if
+  // the caller explicitly pinned preferProvider to 'ollama'.
+  if (preferProvider !== 'ollama') {
+    if (apiKey()) {
+      try {
+        return await callOpenRouter(messages, {
+          maxTokens: opts.maxTokens,
+          temperature: opts.temperature,
+          primaryModel: opts.primaryModel,
+          modelList: opts.modelList,
+        });
+      } catch (err) {
+        console.warn('[AI] OpenRouter fallback failed:', err instanceof Error ? err.message : String(err));
+      }
+    }
+  }
+
+  throw new Error(
+    'No AI provider available. Fixes:\n' +
+    '• Local: start Ollama — run "ollama serve" (models: ' + OLLAMA_MODELS.join(', ') + ')\n' +
+    '• Hosted: set a valid OPENROUTER_API_KEY. Free models are rate-limited per day —\n' +
+    '  add $10 of OpenRouter credits to lift the free-tier daily cap, or self-host Ollama.'
+  );
+}
+
 export async function callOpenRouter(
   messages: OAMessage[],
   opts: {
     maxTokens?: number;
     temperature?: number;
     primaryModel?: string;
+    modelList?: string[]; // Custom model list (if not provided, uses FALLBACK_FREE_MODELS)
   } = {},
 ): Promise<{ content: string; model: string; tokens: number }> {
-  const { maxTokens = 1400, temperature = 0.7, primaryModel } = opts;
+  const { maxTokens = 1400, temperature = 0.7, primaryModel, modelList } = opts;
   const url = `${getBaseUrl()}/chat/completions`;
 
   // OpenRouter requires conversations to start with a user message
@@ -86,9 +224,18 @@ export async function callOpenRouter(
     normalized.push(msg);
   }
 
-  const models: string[] = primaryModel
-    ? [primaryModel, ...FREE_MODELS.filter((m) => m !== primaryModel)]
-    : [...FREE_MODELS];
+  // Build an ordered, de-duplicated waterfall so a single throttled/failed model
+  // never breaks the request: caller's primary model → configured default →
+  // caller's extra list → the curated free-model fallback list. callOpenRouter
+  // then rolls through them in order until one succeeds.
+  const envDefault = (process.env.OPENROUTER_DEFAULT_MODEL || '').trim();
+  const ordered = [
+    primaryModel,
+    envDefault,
+    ...(modelList ?? []),
+    ...FALLBACK_FREE_MODELS,
+  ].filter((m): m is string => !!m);
+  const models: string[] = [...new Set(ordered)];
 
   let lastError = new Error('No models tried');
 
@@ -152,8 +299,22 @@ export async function callOpenRouter(
 // ─── Text cleanup ──────────────────────────────────────────────────────────────
 
 export function stripThinkTags(raw: string): string {
+  // Strip markdown code blocks with backticks (common from Ollama responses)
+  let text = raw.replace(/```(?:json)?\s*\n?([\s\S]*?)\n?```/g, '$1');
+  text = text.replace(/```(?:json)?[\s\S]*?```/g, '');
+  
   // Strip explicit <think>...</think> blocks (DeepSeek R1, Qwen3 thinking mode)
-  let text = raw.replace(/<think>[\s\S]*?<\/think>/gi, '');
+  text = text.replace(/<think>[\s\S]*?<\/think>/gi, '');
+
+  // Normalize fancy Unicode quotes and dashes to ASCII equivalents
+  // This fixes: « » ‹ › — – ′ ″ etc.
+  text = text
+    .replace(/[«»]/g, '"')     // « » → "
+    .replace(/[‹›]/g, "'")     // ‹ › → '
+    .replace(/[—–]/g, '-')     // — – → -
+    .replace(/[′″]/g, "'")     // ′ ″ → '
+    .replace(/['']/g, "'")     // ' ' → '
+    .replace(/[""]/g, '"');    // " " → "
 
   // Strip control / replacement characters
   text = text.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F​-‍﻿]/g, '');

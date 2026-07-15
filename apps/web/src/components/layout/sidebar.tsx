@@ -6,7 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import {
   Shield, LayoutDashboard, Mail, FileText, BookOpen, BarChart3,
   Settings, Users, Brain, AlertTriangle, CreditCard, LogOut, ChevronLeft, X,
-  GraduationCap, Target, Trophy, Cpu, BrainCircuit, Newspaper, Youtube, Sparkles,
+  GraduationCap, Target, Trophy, Cpu, BrainCircuit, Newspaper, Youtube, Sparkles, Terminal,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { createClient } from '@/lib/supabase/client';
@@ -43,6 +43,7 @@ const ALL_ROUTES = [
   ...BOTTOM_ITEMS.map(i => i.href),
   '/dashboard/tube',
   '/dashboard/mentorship',
+  '/dashboard/linux',
 ];
 
 export function Sidebar({ collapsed, onToggle }: SidebarProps) {
@@ -217,6 +218,13 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         <NavItem
           item={{ href: '/dashboard/mentorship', label: 'Mentorship', icon: Sparkles, badge: 'NEW' as const }}
           active={isActive('/dashboard/mentorship')}
+          collapsed={collapsed}
+        />
+
+        {/* Linux — hands-on terminal course with AI tutor, positioned after Mentorship */}
+        <NavItem
+          item={{ href: '/dashboard/linux', label: 'Linux', icon: Terminal, badge: 'NEW' as const }}
+          active={isActive('/dashboard/linux')}
           collapsed={collapsed}
         />
       </nav>

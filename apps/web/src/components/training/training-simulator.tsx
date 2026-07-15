@@ -88,12 +88,19 @@ export function TrainingSimulator() {
   async function generateAIScenarios() {
     setGeneratingAI(true);
     try {
+      console.log('[training] Generating scenarios...');
       const res = await fetch('/api/training/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ type: 'batch-scenarios', count: 5 }),
       });
       const data = await res.json();
+      if (!res.ok) {
+        const msg = data.error || data.message || `HTTP ${res.status}`;
+        console.error('[training] Generation failed:', msg, data);
+        throw new Error(msg);
+      }
+      console.log('[training] Generation success:', data);
       if (data.scenarios) {
         const normalized: TrainingScenario[] = data.scenarios.map((s: any) => ({
           ...s,
@@ -102,7 +109,11 @@ export function TrainingSimulator() {
         }));
         setAiScenarios(normalized);
       }
-    } catch {} finally {
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to generate scenarios';
+      console.error('[training] Catch error:', msg, err);
+      toast.error(msg);
+    } finally {
       setGeneratingAI(false);
     }
   }

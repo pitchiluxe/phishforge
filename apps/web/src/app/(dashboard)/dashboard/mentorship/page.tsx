@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Search,
@@ -261,6 +261,9 @@ export default function MentorshipPage() {
       setLoading(false);
     }
   }, []);
+
+  // Auto-load courses on first mount so the tab fills without an extra click.
+  useEffect(() => { fetchCourses(); }, [fetchCourses]);
 
   const filtered = useMemo(() => {
     return courses.filter((c) => {
