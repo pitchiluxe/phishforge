@@ -24,6 +24,57 @@ function extractFields(raw: string): Record<string, string> | null {
   };
 }
 
+// Curated simulation templates used when the AI provider is unavailable/rate-limited,
+// so the campaign tab always produces usable, on-brand training content. Placeholders
+// ({{employee_name}}, {{company_name}}, {{tracking_url}}) are filled at send time.
+interface FallbackTemplate { subject: string; sender_name: string; sender_email: string; body_html: string; body_text: string }
+
+const FALLBACK_TEMPLATES: { match: RegExp; t: FallbackTemplate }[] = [
+  {
+    match: /cred|password|login|account|mfa|verify|phish/i,
+    t: {
+      subject: '[Action Required] Your {{company_name}} password expires today',
+      sender_name: '{{company_name}} IT Service Desk',
+      sender_email: 'no-reply@it-servicedesk-alerts.com',
+      body_html: "<div style='font-family:Segoe UI,Arial,sans-serif;color:#201f1e;font-size:14px'><p>Hi {{employee_name}},</p><p>Our records show the password for your <strong>{{company_name}}</strong> account will expire <strong>today</strong>. To keep access to your email and shared files, please confirm your password through the secure portal below.</p><p><a href='{{tracking_url}}' style='background:#0078d4;color:#ffffff;padding:10px 18px;border-radius:4px;text-decoration:none;display:inline-block'>Keep My Password</a></p><p style='color:#605e5c'>If this is not completed within 24 hours, your account may be temporarily suspended for security reasons.</p><p>Thank you,<br>{{company_name}} IT Service Desk</p></div>",
+      body_text: 'Hi {{employee_name}},\n\nThe password for your {{company_name}} account will expire today. To keep access to your email and shared files, confirm your password via the secure portal: {{tracking_url}}\n\nIf this is not completed within 24 hours, your account may be temporarily suspended.\n\nThank you,\n{{company_name}} IT Service Desk',
+    },
+  },
+  {
+    match: /attach|invoice|payment|document|file|billing/i,
+    t: {
+      subject: 'Overdue invoice for {{company_name}} — 2nd notice',
+      sender_name: 'Accounts Receivable',
+      sender_email: 'billing@vendor-invoices-portal.com',
+      body_html: "<div style='font-family:Arial,sans-serif;color:#222;font-size:14px'><p>Dear {{employee_name}},</p><p>Our records indicate an outstanding balance on the account for <strong>{{company_name}}</strong>. This is our second notice. Please review the attached statement and remit payment to avoid a service interruption.</p><p><a href='{{tracking_url}}' style='background:#b91c1c;color:#ffffff;padding:10px 18px;border-radius:4px;text-decoration:none;display:inline-block'>View Invoice</a></p><p style='color:#666'>If you believe this notice is in error, please contact our billing department.</p><p>Regards,<br>Accounts Receivable</p></div>",
+      body_text: 'Dear {{employee_name}},\n\nThere is an outstanding balance on the account for {{company_name}}. This is our second notice. Please review the statement and remit payment to avoid a service interruption: {{tracking_url}}\n\nRegards,\nAccounts Receivable',
+    },
+  },
+  {
+    match: /hr|benefit|payroll|policy|survey|onboard/i,
+    t: {
+      subject: '{{company_name}} HR: Benefits enrollment closes Friday',
+      sender_name: '{{company_name}} HR Team',
+      sender_email: 'hr-notifications@company-benefits.com',
+      body_html: "<div style='font-family:Arial,sans-serif;color:#222;font-size:14px'><p>Hi {{employee_name}},</p><p>Open enrollment for your {{company_name}} benefits closes this <strong>Friday</strong>. Employees who do not confirm their selections will keep last year's plan by default.</p><p><a href='{{tracking_url}}' style='background:#047857;color:#ffffff;padding:10px 18px;border-radius:4px;text-decoration:none;display:inline-block'>Review My Benefits</a></p><p style='color:#666'>This takes about two minutes to complete.</p><p>Thanks,<br>{{company_name}} HR Team</p></div>",
+      body_text: "Hi {{employee_name}},\n\nOpen enrollment for your {{company_name}} benefits closes this Friday. Confirm your selections here: {{tracking_url}}\n\nThanks,\n{{company_name}} HR Team",
+    },
+  },
+];
+
+const GENERIC_FALLBACK: FallbackTemplate = {
+  subject: 'Unusual sign-in to your {{company_name}} account',
+  sender_name: 'Account Protection',
+  sender_email: 'security-alert@account-protection.com',
+  body_html: "<div style='font-family:Segoe UI,Arial,sans-serif;color:#201f1e;font-size:14px'><p>Hi {{employee_name}},</p><p>We detected a sign-in to your <strong>{{company_name}}</strong> account from a new device. If this was you, no action is needed. If you do not recognize this activity, please review your recent sessions now.</p><p><a href='{{tracking_url}}' style='background:#0078d4;color:#ffffff;padding:10px 18px;border-radius:4px;text-decoration:none;display:inline-block'>Review Activity</a></p><p style='color:#605e5c'>Protecting your account is important to us.</p><p>{{company_name}} Account Protection</p></div>",
+  body_text: 'Hi {{employee_name}},\n\nWe detected a sign-in to your {{company_name}} account from a new device. If you do not recognize this activity, review your recent sessions: {{tracking_url}}\n\n{{company_name}} Account Protection',
+};
+
+function fallbackTemplate(simulationType?: string): FallbackTemplate {
+  const key = simulationType ?? '';
+  return FALLBACK_TEMPLATES.find(({ match }) => match.test(key))?.t ?? GENERIC_FALLBACK;
+}
+
 function isDemoOrPlaceholder() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
   return !url || url.includes('placeholder');
@@ -81,12 +132,12 @@ Difficulty: ${body.difficulty}/5 (5 = most sophisticated)
 ${body.context ? `Context: ${body.context}` : ''}`;
 
   const startTime = Date.now();
-  let content = '';
 
+  // Try AI first; on any failure (rate limit, no credits, refusal, bad JSON) fall
+  // back to a curated template so the campaign tab always yields usable content.
+  let content = '';
+  let aiError: string | null = null;
   try {
-    // Resilient: prefer the requested provider, but callAI waterfalls across local
-    // Ollama and the free OpenRouter models so a single rate-limited/unavailable
-    // provider doesn't fail the whole generation.
     const result = await callAI(
       [
         { role: 'system', content: systemPrompt },
@@ -100,40 +151,44 @@ ${body.context ? `Context: ${body.context}` : ''}`;
       },
     );
     content = stripThinkTags(result.content);
+  } catch (e: any) {
+    aiError = e?.message ?? 'AI provider unavailable';
+  }
 
-    const latency_ms = Date.now() - startTime;
+  const latency_ms = Date.now() - startTime;
 
-    let parsed: any;
-    try {
-      parsed = parseAIJson<any>(content);
-    } catch {
-      parsed = extractFields(content);
-    }
-    if (!parsed || (!parsed.subject && !parsed.body_html && !parsed.body_text)) {
-      // Distinguish a model refusal / empty reply from malformed JSON so the user
-      // knows to switch models rather than just retry the same one.
-      const trimmed = (content ?? '').trim();
-      const refused = /\b(can'?t|cannot|won'?t|unable to|not able to|i'?m sorry|i am sorry|i can'?t help)\b/i.test(trimmed) && trimmed.length < 400;
-      const msg = trimmed.length === 0
-        ? 'The AI model returned an empty response. Try again or switch models in AI Models.'
-        : refused
-          ? 'The selected AI model declined to generate this training content. Switch to a more capable model in AI Models (Settings) and retry.'
-          : 'AI returned invalid JSON. Try again.';
-      return NextResponse.json({ error: msg }, { status: 422 });
-    }
+  // Parse the AI output when we have one.
+  let parsed: any = null;
+  if (!aiError) {
+    try { parsed = parseAIJson<any>(content); } catch { parsed = extractFields(content); }
+  }
+  const usable = parsed && (parsed.subject || parsed.body_html || parsed.body_text);
+  const usedFallback = !usable;
+  if (usedFallback) parsed = fallbackTemplate(body.simulation_type);
 
-    const text = `${parsed.subject} ${parsed.body_text}`.toLowerCase();
-    const keywords = ['password', 'login', 'credential', 'verify', 'urgent', 'suspended'];
-    const safety_score = Math.max(40, 100 - keywords.filter(k => text.includes(k)).length * 5);
+  // Normalise so every field is present regardless of source.
+  const fields = {
+    subject: parsed.subject ?? 'Security Notice',
+    sender_name: parsed.sender_name ?? 'IT Support',
+    sender_email: parsed.sender_email ?? 'no-reply@company-alerts.com',
+    body_html: parsed.body_html ?? parsed.body_text ?? '',
+    body_text: parsed.body_text ?? String(parsed.body_html ?? '').replace(/<[^>]+>/g, ''),
+  };
 
-    const template = {
-      id: `tpl-${Date.now()}`,
-      name: `AI Generated — ${body.industry}/${body.target_role}`,
-      ...parsed,
-      safety_score,
-      ai_generated: true,
-    };
+  const text = `${fields.subject} ${fields.body_text}`.toLowerCase();
+  const keywords = ['password', 'login', 'credential', 'verify', 'urgent', 'suspended'];
+  const safety_score = Math.max(40, 100 - keywords.filter(k => text.includes(k)).length * 5);
 
+  const template = {
+    id: `tpl-${Date.now()}`,
+    name: `${usedFallback ? 'Curated' : 'AI Generated'} — ${body.industry}/${body.target_role}`,
+    ...fields,
+    safety_score,
+    ai_generated: !usedFallback,
+    fallback: usedFallback,
+  };
+
+  try {
     if (!isDemo && supabase) {
       const { data: saved } = await supabase.from('templates').insert({
         organization_id: orgId,
@@ -143,14 +198,14 @@ ${body.context ? `Context: ${body.context}` : ''}`;
         industry: body.industry,
         target_role: body.target_role,
         difficulty: body.difficulty,
-        subject: parsed.subject,
-        body_html: parsed.body_html,
-        body_text: parsed.body_text,
-        sender_name: parsed.sender_name,
-        sender_email: parsed.sender_email,
-        ai_generated: true,
+        subject: fields.subject,
+        body_html: fields.body_html,
+        body_text: fields.body_text,
+        sender_name: fields.sender_name,
+        sender_email: fields.sender_email,
+        ai_generated: !usedFallback,
         safety_score,
-        generation_meta: { model: primaryModel, provider, latency_ms },
+        generation_meta: { model: usedFallback ? 'curated-fallback' : primaryModel, provider, latency_ms, fallback: usedFallback },
       }).select().single();
 
       void supabase.from('ai_generation_logs').insert({
@@ -158,28 +213,18 @@ ${body.context ? `Context: ${body.context}` : ''}`;
         user_id: sessionUserId,
         campaign_id: campaignId,
         provider,
-        model: primaryModel,
+        model: usedFallback ? 'curated-fallback' : primaryModel,
         latency_ms,
-        success: true,
+        success: !usedFallback,
+        error_message: aiError ?? undefined,
         safety_score,
       });
 
-      return NextResponse.json({ template: saved ?? template, safety_score });
+      return NextResponse.json({ template: saved ?? template, safety_score, fallback: usedFallback });
     }
-
-    return NextResponse.json({ template, safety_score });
-  } catch (error: any) {
-    if (!isDemo && supabase) {
-      void supabase.from('ai_generation_logs').insert({
-        organization_id: orgId,
-        user_id: sessionUserId,
-        campaign_id: campaignId,
-        provider,
-        model: primaryModel,
-        success: false,
-        error_message: error.message,
-      });
-    }
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch {
+    // Persisting failed — still return the generated template below.
   }
+
+  return NextResponse.json({ template, safety_score, fallback: usedFallback });
 }

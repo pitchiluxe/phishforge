@@ -310,6 +310,19 @@ export function CampaignGenerator({ defaultProvider, defaultModel, plan }: Campa
             animate={{ opacity: 1, y: 0 }}
             className="space-y-4"
           >
+            {/* Fallback notice — shown when AI was unavailable and a curated template was used */}
+            {generated.fallback && (
+              <div className="rounded-xl border border-violet-500/30 bg-violet-500/5 p-4 flex items-start gap-3">
+                <Sparkles className="h-5 w-5 text-violet-400 flex-shrink-0 mt-0.5" />
+                <div>
+                  <div className="text-sm font-medium text-violet-300">Curated template (AI offline)</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">
+                    The AI provider is currently rate-limited or out of credits, so a curated simulation template was used. It&apos;s fully editable — live AI generation resumes automatically once a model is available.
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Safety score */}
             <div className={cn(
               'rounded-xl border p-4 flex items-center gap-3',
